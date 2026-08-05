@@ -1,0 +1,15 @@
+{
+  "name": "toktickit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TokTickIT - IT Helpdesk Support & Ticketing System",
+  "scripts": {
+    "test": "npm --prefix client test && npm --prefix server test",
+    "test:client": "npm --prefix client test",
+    "test:server": "npm --prefix server test",
+    "dev:client": "npm --prefix client dev",
+    "dev:server": "npm --prefix server dev",
+    "build:client": "npm --prefix client build",
+    "build:server": "npm --prefix server build"
+  }
+}
