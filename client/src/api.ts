@@ -21,7 +21,12 @@ export async function checkSystem(): Promise<SystemStatus> {
     if (!res.ok) {
       throw new Error("Unable to connect to TokTickIT API");
     }
-    return { online: true, categories: [] };
+    const categoriesRes = await fetch(`${API_URL}/api/categories`);
+    if (!categoriesRes.ok) {
+      throw new Error("Unable to connect to TokTickIT API");
+    }
+    const categories = (await categoriesRes.json()) as Category[];
+    return { online: true, categories };
   } catch (error) {
     if (error instanceof Error && error.message !== "Unable to connect to TokTickIT API") {
       throw new Error("Unable to connect to TokTickIT API");
