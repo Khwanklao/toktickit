@@ -8,13 +8,13 @@ export default function App() {
   const [state, setState] = useState<UiState>("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [categories, setCategories] = useState<Category[]>([]);
-  void categories;
 
   async function handleCheck() {
     setState("loading");
     setErrorMessage("");
     try {
-      await checkSystem();
+      const res = await checkSystem();
+      setCategories(res.categories);
       setState("success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unable to connect to TokTickIT API";
@@ -38,9 +38,21 @@ export default function App() {
       )}
 
       {state === "success" && (
-        <div className="alert alert-success mt-3" role="alert">
-          System Status: Online
-        </div>
+        <>
+          <div className="alert alert-success mt-3" role="alert">
+            System Status: Online
+          </div>
+          <div className="mt-4">
+            <h2 className="h5 mb-3">Supported Request Categories</h2>
+            <ul className="list-group">
+              {categories.map((cat) => (
+                <li key={cat.id} className="list-group-item">
+                  {cat.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
       )}
 
       {state === "error" && (
