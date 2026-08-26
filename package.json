@@ -11,5 +11,14 @@
     "dev:server": "npm --prefix server dev",
     "build:client": "npm --prefix client build",
     "build:server": "npm --prefix server build"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.0"
+  },
+  "devDependencies": {
+    "prisma": "^8.0.0-rc.11"
   }
 }
