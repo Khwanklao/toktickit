@@ -75,7 +75,7 @@ model Ticket {
 model Attachment {
   id               Int           @id @default(autoincrement())
   ticketId         Int
-  ticket           Ticket        @relation(fields: [ticketId], references: [id])
+  ticket           Ticket        @relation(fields: [ticketId], references: [id] , onDelete: Cascade)
   originalFileName String
   storedFileName   String
   mimeType         String
