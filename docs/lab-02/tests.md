@@ -111,7 +111,7 @@ _To be completed after implementation, before submission. Summarize per-suite pa
 
 | Suite | Total | Passed | Failed | Skipped |
 | :--- | :--- | :--- | :--- | :--- |
-| Unit (`test:server` — unit subset) | TBD | TBD | TBD | 0 |
+| Unit (`test:server` — unit subset) | 5 | 5 | 0 | 0 |
 | API (`test:server`) | TBD | TBD | TBD | 0 |
 | UI (`test:client`) | TBD | TBD | TBD | 0 |
 | E2E + Responsive (`playwright test`) | TBD | TBD | TBD | 0 |
@@ -119,4 +119,5 @@ _To be completed after implementation, before submission. Summarize per-suite pa
 No test in this plan may be marked `Skipped` in the final submission; any deferred scenario must be listed in Section 7 instead of silently disabled.
 
 ## 7. Known Limitations or Deferred Tests
-None; all planned tests were implemented and executed.
+- **Current Milestone (Issue 2)**: UNIT-01 (Ticket Number Formatting) has been implemented and verified (5/5 passed).
+- **Pending Implementation**: API tests, UI tests, and E2E/Responsive test suites are deferred to their respective feature issues in Sprint 2.
