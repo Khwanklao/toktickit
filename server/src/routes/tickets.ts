@@ -134,20 +134,13 @@ ticketsRouter.post("/", async (req: Request, res: Response) => {
 
     // Atomic counter & persistence inside transaction
     const ticket = await prisma.$transaction(async (tx) => {
-      let sequenceNum: number;
-      try {
-        const [{ nextval }] = await tx.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('"Ticket_id_seq"')`;
-        sequenceNum = Number(nextval);
-      } catch {
-        const count = await tx.ticket.count();
-        sequenceNum = count + 1;
-      }
+      const [{ nextval }] = await tx.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('"Ticket_id_seq"')`;
+      const sequenceNum = Number(nextval);
 
       const ticketNumber = generateTicketNumber(sequenceNum);
 
       return await tx.ticket.create({
         data: {
-          id: sequenceNum,
           ticketNumber,
           requesterId,
           categoryId,
