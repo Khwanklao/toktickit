@@ -1,53 +1,21 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 import { getPrisma } from "../prisma.js";
 import { generateTicketNumber } from "../utils/ticket-number.js";
+import { authenticateRequester } from "../utils/auth.js";
+import { validateAttachmentFile } from "../utils/attachment-validation.js";
 
 export const ticketsRouter = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const VALID_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const VALID_STATUSES = ["NEW", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 const VALID_SORT_FIELDS = ["createdAt", "updatedAt", "ticketNumber"];
 const VALID_SORT_DIRS = ["asc", "desc"];
 const ALLOWED_PAGE_SIZES = [10, 25, 50];
-
-async function authenticateRequester(req: Request, res: Response): Promise<number | null> {
-  const rawHeader = req.headers["x-requester-id"];
-
-  if (!rawHeader || Array.isArray(rawHeader)) {
-    res.status(400).json({
-      statusCode: 400,
-      error: "Bad Request",
-      message: "Missing x-requester-id header",
-    });
-    return null;
-  }
-
-  const requesterId = Number(rawHeader);
-  if (!Number.isInteger(requesterId) || requesterId <= 0 || rawHeader.trim() !== String(requesterId)) {
-    res.status(400).json({
-      statusCode: 400,
-      error: "Bad Request",
-      message: "Invalid x-requester-id header",
-    });
-    return null;
-  }
-
-  const prisma = getPrisma();
-  const requester = await prisma.requesterUser.findUnique({
-    where: { id: requesterId },
-  });
-
-  if (!requester || !requester.isActive) {
-    res.status(403).json({
-      statusCode: 403,
-      error: "Forbidden",
-      message: "Requester is inactive or unauthorized",
-    });
-    return null;
-  }
-
-  return requesterId;
-}
 
 ticketsRouter.post("/", async (req: Request, res: Response) => {
   try {
@@ -358,5 +326,133 @@ ticketsRouter.get("/:id", async (req: Request, res: Response) => {
       message: "Failed to fetch ticket details",
     });
   }
+});
+
+ticketsRouter.post("/:id/attachments", (req: Request, res: Response) => {
+  upload.single("file")(req, res, async (err) => {
+    try {
+      // 1. Header Authentication
+      const requesterId = await authenticateRequester(req, res);
+      if (requesterId === null) return;
+
+      // 2. Path Parameter Format Check
+      const idParam = req.params.id;
+      const ticketId = Number(idParam);
+      if (!/^\d+$/.test(idParam) || !Number.isInteger(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          statusCode: 404,
+          error: "Not Found",
+          message: "Ticket not found",
+        });
+      }
+
+      // 3. Resource Existence & Requester Ownership Check
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true, requesterId: true },
+      });
+
+      if (!ticket || ticket.requesterId !== requesterId) {
+        return res.status(404).json({
+          statusCode: 404,
+          error: "Not Found",
+          message: "Ticket not found",
+        });
+      }
+
+      // 4. Business Rule State Guards (Active Attachment Limit Check: max 5)
+      const activeCount = await prisma.attachment.count({
+        where: { ticketId, isRemoved: false },
+      });
+
+      if (activeCount >= 5) {
+        return res.status(409).json({
+          statusCode: 409,
+          error: "Conflict",
+          message: "Ticket already has maximum allowed active attachments (5)",
+        });
+      }
+
+      // 5. Payload / File Content Validation
+      if (err) {
+        return res.status(400).json({
+          statusCode: 400,
+          error: "Bad Request",
+          message: err.message || "File upload error",
+        });
+      }
+
+      const validation = validateAttachmentFile(req.file);
+      if (!validation.isValid) {
+        return res.status(400).json({
+          statusCode: 400,
+          error: "Bad Request",
+          message: validation.message,
+        });
+      }
+
+      const file = req.file!;
+      const uploadsDir = path.resolve(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storedFileName = `${crypto.randomUUID()}-${safeOriginalName}`;
+      const filePath = path.join(uploadsDir, storedFileName);
+
+      try {
+        fs.writeFileSync(filePath, file.buffer);
+      } catch (writeError) {
+        return res.status(500).json({
+          statusCode: 500,
+          error: "Internal Server Error",
+          message: "Attachment upload failed. Your ticket was saved — you can retry the upload.",
+        });
+      }
+
+      try {
+        const attachment = await prisma.attachment.create({
+          data: {
+            ticketId,
+            originalFileName: file.originalname,
+            storedFileName,
+            mimeType: file.mimetype,
+            fileSize: file.size,
+            uploadedBy: requesterId,
+            isRemoved: false,
+          },
+        });
+
+        return res.status(201).json({
+          id: attachment.id,
+          ticketId: attachment.ticketId,
+          originalFileName: attachment.originalFileName,
+          fileSize: attachment.fileSize,
+          mimeType: attachment.mimeType,
+          createdAt: attachment.createdAt.toISOString(),
+          isRemoved: attachment.isRemoved,
+        });
+      } catch (dbError) {
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (_) {}
+        }
+        return res.status(500).json({
+          statusCode: 500,
+          error: "Internal Server Error",
+          message: "Attachment upload failed. Your ticket was saved — you can retry the upload.",
+        });
+      }
+    } catch (error) {
+      return res.status(500).json({
+        statusCode: 500,
+        error: "Internal Server Error",
+        message: "Attachment upload failed",
+      });
+    }
+  });
 });
 

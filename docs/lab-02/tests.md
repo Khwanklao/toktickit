@@ -8,7 +8,7 @@ This plan is written before implementation begins and is intended to drive a Tes
 | Test ID | Requirement / AC | Type | What It Tests | Expected Result | Automated Test File | Final Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **UNIT-01** | BR-01, AC-01 | Unit | Ticket number format generation | Returns string matching `^TKT-\d{4}-\d{6}$` | `server/tests/lab-02/ticket-number.test.ts` | Planned |
-| **UNIT-02** | BR-06, AC-04 | Unit | Attachment file validation logic (server-side) | Rejects files >5MB or unsupported MIME types | `server/tests/lab-02/attachment-validation.test.ts` | Planned |
+| **UNIT-02** | BR-06, AC-04 | Unit | Attachment file validation logic (server-side) | Rejects files >5MB or unsupported MIME types | `server/tests/lab-02/attachment-validation.test.ts` | Pass |
 | **UNIT-03** | BR-17 | Unit | Secondary sort tie-breaker logic | When `createdAt` ties, comparator orders by `ticketNumber DESC` | `server/tests/lab-02/sort-comparator.test.ts` | Planned |
 | **API-01** | AC-01, FR-04 | API | Create ticket with valid data | `201 Created`; returns ticket with `status = NEW` | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
 | **API-02** | AC-07, BR-09 | API | Create ticket with missing summary/description | `400 Bad Request`; returns field error details | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
@@ -20,14 +20,16 @@ This plan is written before implementation begins and is intended to drive a Tes
 | **API-07** | FR-10, BR-16 | API | Ticket list pagination and invalid-pageSize fallback | `200 OK`; returns correct page slice; invalid pageSize falls back to 10 | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
 | **API-07b** | BR-08, BR-17 | API | Default list ordering with no sort params, including tie-break | `200 OK`; ordered `createdAt DESC`, ties broken by `ticketNumber DESC` | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
 | **API-08** | AC-03, AC-14 | API | Requester A accesses Requester B's ticket detail | `404 Not Found` or `403 Forbidden` | `server/tests/lab-02/ticket-detail.api.test.ts` | Planned |
-| **API-08b** | AC-14, BR-04 | API | Requester A downloads Requester B's attachment directly by ID | `404 Not Found` or `403 Forbidden`; file not streamed | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| **API-09** | AC-04, FR-12 | API | Upload invalid file type/size to ticket (server-side check) | `400 Bad Request`; upload rejected | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| **API-10** | AC-12, BR-15 | API | Upload 6th active attachment to ticket | `409 Conflict`; rejected; existing 5 unaffected | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| **API-11** | AC-05, AC-13 | API | Soft-remove attachment with reason and attempt download | `200 OK` on delete; subsequent download returns `404/410` | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| **API-11b** | AC-13, BR-21 | API | Fetch metadata of a soft-removed attachment | `200 OK`; metadata (incl. `isRemoved`, `removalReason`) still returned | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| **API-12** | AC-22, BR-22 | API | Soft-remove attachment without removal reason | `400 Bad Request`; attachment remains active | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| **API-08b** | AC-14, BR-04 | API | Requester A downloads Requester B's attachment directly by ID | `404 Not Found` or `403 Forbidden`; file not streamed | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-09** | AC-04, FR-12 | API | Upload invalid file type/size to ticket (server-side check) | `400 Bad Request`; upload rejected | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-10** | AC-12, BR-15 | API | Upload 6th active attachment to ticket | `409 Conflict`; rejected; existing 5 unaffected | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-11** | AC-05, AC-13 | API | Soft-remove attachment with reason and attempt download | `200 OK` on delete; subsequent download returns `404/410` | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-11b** | AC-13, BR-21 | API | Fetch metadata of a soft-removed attachment | `200 OK`; metadata (incl. `isRemoved`, `removalReason`) still returned | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-12** | AC-22, BR-22 | API | Soft-remove attachment without removal reason | `400 Bad Request`; attachment remains active | `server/tests/lab-02/attachments.api.test.ts` | Pass |
 | **API-13** | AC-17, BR-18 | API | Fetch active requesters endpoint (success case, and failure case with DB/service call mocked to throw) | `200 OK` returns active requesters only; mocked failure returns safe `500` with no stack trace leaked | `server/tests/lab-02/requesters.api.test.ts` | Planned |
-| **API-14** | AC-19, AC-20, BR-20, BR-24 | API | Ticket created successfully, attachment upload fails, then retried | Ticket count stays at 1 across the failure; no Attachment row on failure; retry succeeds and attachment becomes active | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| **API-14** | AC-19, AC-20, BR-20, BR-24 | API | Ticket created successfully, attachment upload fails, then retried | Ticket count stays at 1 across the failure; no Attachment row on failure; retry succeeds and attachment becomes active | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-15** | AC-05, BR-07, BR-22 | API | Repeat soft-delete on an already soft-removed file | `409 Conflict`; non-idempotent delete rejected; original removal data preserved | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| **API-16** | AC-13, BR-04, FR-14 | API | Download endpoint for soft-deleted vs unowned/missing files | `410 Gone` for soft-deleted files; `404 Not Found` for unowned/missing files | `server/tests/lab-02/attachments.api.test.ts` | Pass |
 | **UI-01** | AC-02, FR-01 | UI | Development Requester selector renders and selects user | Selecting requester persists context and redirects | `client/tests/lab-02/RequesterSelector.test.tsx` | Planned |
 | **UI-02** | AC-17, AC-18 | UI | Requester selector empty and error states | Shows error alert with retry / empty state with disabled Continue | `client/tests/lab-02/RequesterSelector.test.tsx` | Planned |
 | **UI-03** | AC-07, BR-10 | UI | Create ticket form client-side validation and error state | Displays field errors; preserves form inputs | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
@@ -53,7 +55,7 @@ This plan is written before implementation begins and is intended to drive a Tes
 | **AC-02** | `UI-01` |
 | **AC-03** | `API-04`, `API-08`, `E2E-02` |
 | **AC-04** | `UNIT-02`, `API-09` |
-| **AC-05** | `API-11`, `E2E-03` |
+| **AC-05** | `API-11`, `API-15`, `E2E-03` |
 | **AC-06** | `API-05` |
 | **AC-07** | `API-02`, `UI-03` |
 | **AC-08** | `UI-05` |
@@ -61,7 +63,7 @@ This plan is written before implementation begins and is intended to drive a Tes
 | **AC-10** | `UI-04` |
 | **AC-11** | `UI-07` |
 | **AC-12** | `API-10` |
-| **AC-13** | `API-11`, `API-11b`, `E2E-03` |
+| **AC-13** | `API-11`, `API-11b`, `API-16`, `E2E-03` |
 | **AC-14** | `API-08`, `API-08b`, `E2E-02` |
 | **AC-15** | `RESP-01` |
 | **AC-16** | `UI-09` |
@@ -111,13 +113,13 @@ _To be completed after implementation, before submission. Summarize per-suite pa
 
 | Suite | Total | Passed | Failed | Skipped |
 | :--- | :--- | :--- | :--- | :--- |
-| Unit (`test:server` — unit subset) | 5 | 5 | 0 | 0 |
-| API (`test:server`) | TBD | TBD | TBD | 0 |
+| Unit (`test:server` — unit subset) | 14 | 14 | 0 | 0 |
+| API (`test:server`) | 43 | 43 | 0 | 0 |
 | UI (`test:client`) | TBD | TBD | TBD | 0 |
 | E2E + Responsive (`playwright test`) | TBD | TBD | TBD | 0 |
 
 No test in this plan may be marked `Skipped` in the final submission; any deferred scenario must be listed in Section 7 instead of silently disabled.
 
 ## 7. Known Limitations or Deferred Tests
-- **Current Milestone (Issue 2)**: UNIT-01 (Ticket Number Formatting) has been implemented and verified (5/5 passed).
-- **Pending Implementation**: API tests, UI tests, and E2E/Responsive test suites are deferred to their respective feature issues in Sprint 2.
+- **Current Milestone (Issue 5 - Attachment Management APIs)**: Implemented and verified UNIT-02 (5 tests), API-08b, API-09, API-10, API-11, API-11b, API-12, API-14, API-15, and API-16 (16 attachment integration tests). All 57 server unit and API integration tests passed (100% pass rate).
+- **Pending Implementation**: UI tests and E2E/Responsive test suites are deferred to their respective feature issues in Sprint 2.
