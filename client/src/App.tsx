@@ -1,66 +1,51 @@
-import { useState } from "react";
-import { checkSystem, Category } from "./api.js";
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
+import { AppShell } from "./components/AppShell.js";
+import { RequesterSelector } from "./components/RequesterSelector.js";
+import { RouteGuard } from "./components/RouteGuard.js";
+import {
+  MyTicketsPlaceholder,
+  CreateTicketPlaceholder,
+  TicketDetailPlaceholder,
+} from "./components/PlaceholderScreens.js";
+import "./index.css";
 
-// UI states you must handle for Issue 4: idle, loading, success, error.
-type UiState = "idle" | "loading" | "success" | "error";
-
-export default function App() {
-  const [state, setState] = useState<UiState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string>("");
-  const [categories, setCategories] = useState<Category[]>([]);
-
-  async function handleCheck() {
-    setState("loading");
-    setErrorMessage("");
-    try {
-      const res = await checkSystem();
-      setCategories(res.categories);
-      setState("success");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unable to connect to TokTickIT API";
-      setErrorMessage(msg);
-      setState("error");
-    }
-  }
+const ProtectedAppLayout: React.FC = () => {
+  const { currentRequester } = useRequester();
 
   return (
-    <div className="container py-5" style={{ maxWidth: 640 }}>
-      <h1 className="h3 mb-4">
-        TokTickIT <span className="text-success">IT Service Desk</span>
-      </h1>
-
-      <button className="btn btn-success" onClick={handleCheck} disabled={state === "loading"}>
-        {state === "loading" ? "Loading…" : "Check System"}
-      </button>
-
-      {state === "loading" && (
-        <div className="mt-3 text-muted">Checking system status...</div>
-      )}
-
-      {state === "success" && (
-        <>
-          <div className="alert alert-success mt-3" role="alert">
-            System Status: Online
-          </div>
-          <div className="mt-4">
-            <h2 className="h5 mb-3">Supported Request Categories</h2>
-            <ul className="list-group">
-              {categories.map((cat) => (
-                <li key={cat.id} className="list-group-item">
-                  {cat.name}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      {state === "error" && (
-        <div className="alert alert-danger mt-3" role="alert">
-          <div>System Status: Offline</div>
-          <div className="small mt-1">{errorMessage || "Unable to connect to TokTickIT API"}</div>
+    <RouteGuard>
+      <AppShell>
+        {/* Keying the page subtree on currentRequester.id ensures React unmounts & remounts on switch (BR-14) */}
+        <div key={currentRequester?.id}>
+          <Routes>
+            <Route path="/tickets" element={<MyTicketsPlaceholder />} />
+            <Route path="/tickets/new" element={<CreateTicketPlaceholder />} />
+            <Route path="/tickets/:id" element={<TicketDetailPlaceholder />} />
+            <Route path="*" element={<Navigate to="/tickets" replace />} />
+          </Routes>
         </div>
-      )}
-    </div>
+      </AppShell>
+    </RouteGuard>
+  );
+};
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/select-requester" element={<AppShell><RequesterSelector /></AppShell>} />
+      <Route path="/*" element={<ProtectedAppLayout />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <RequesterProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </RequesterProvider>
   );
 }
