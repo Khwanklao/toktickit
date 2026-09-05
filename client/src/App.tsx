@@ -4,8 +4,8 @@ import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
 import { AppShell } from "./components/AppShell.js";
 import { RequesterSelector } from "./components/RequesterSelector.js";
 import { RouteGuard } from "./components/RouteGuard.js";
+import { MyTickets } from "./components/MyTickets.js";
 import {
-  MyTicketsPlaceholder,
   CreateTicketPlaceholder,
   TicketDetailPlaceholder,
 } from "./components/PlaceholderScreens.js";
@@ -17,10 +17,10 @@ const ProtectedAppLayout: React.FC = () => {
   return (
     <RouteGuard>
       <AppShell>
-        {/* Keying the page subtree on currentRequester.id ensures React unmounts & remounts on switch (BR-14) */}
+        {/* Keying the page subtree on currentRequester.id ensures React unmounts & remounts on switch (BR-14, UI-07) */}
         <div key={currentRequester?.id}>
           <Routes>
-            <Route path="/tickets" element={<MyTicketsPlaceholder />} />
+            <Route path="/tickets" element={<MyTickets />} />
             <Route path="/tickets/new" element={<CreateTicketPlaceholder />} />
             <Route path="/tickets/:id" element={<TicketDetailPlaceholder />} />
             <Route path="*" element={<Navigate to="/tickets" replace />} />

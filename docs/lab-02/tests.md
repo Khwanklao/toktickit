@@ -14,11 +14,11 @@ This plan is written before implementation begins and is intended to drive a Tes
 | **API-02** | AC-07, BR-09 | API | Create ticket with missing summary/description | `400 Bad Request`; returns field error details | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
 | **API-03a** | BR-04, BR-13 | API | Create ticket with missing `x-requester-id` header | `400 Bad Request`; no ticket created | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
 | **API-03b** | BR-05 | API | Create ticket with an inactive requester's ID in header | `403 Forbidden`; no ticket created | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| **API-04** | AC-03, FR-06 | API | Fetch tickets scoped to active requester | `200 OK`; returns only current requester's tickets | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| **API-05** | AC-06, FR-07 | API | Search tickets by query string (summary/number) | `200 OK`; returns matching tickets | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| **API-06** | FR-08, FR-09 | API | Filter and explicit sort tickets (category, priority, sortBy) | `200 OK`; returned data sorted and filtered as requested | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| **API-07** | FR-10, BR-16 | API | Ticket list pagination and invalid-pageSize fallback | `200 OK`; returns correct page slice; invalid pageSize falls back to 10 | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| **API-07b** | BR-08, BR-17 | API | Default list ordering with no sort params, including tie-break | `200 OK`; ordered `createdAt DESC`, ties broken by `ticketNumber DESC` | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
+| **API-04** | AC-03, FR-06 | API | Fetch tickets scoped to active requester | `200 OK`; returns only current requester's tickets | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| **API-05** | AC-06, FR-07 | API | Search tickets by query string (summary/number) | `200 OK`; returns matching tickets | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| **API-06** | FR-08, FR-09 | API | Filter and explicit sort tickets (category, priority, sortBy) | `200 OK`; returned data sorted and filtered as requested | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| **API-07** | FR-10, BR-16 | API | Ticket list pagination and invalid-pageSize fallback | `200 OK`; returns correct page slice; invalid pageSize falls back to 10 | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| **API-07b** | BR-08, BR-17 | API | Default list ordering with no sort params, including tie-break | `200 OK`; ordered `createdAt DESC`, ties broken by `ticketNumber DESC` | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
 | **API-08** | AC-03, AC-14 | API | Requester A accesses Requester B's ticket detail | `404 Not Found` or `403 Forbidden` | `server/tests/lab-02/ticket-detail.api.test.ts` | Planned |
 | **API-08b** | AC-14, BR-04 | API | Requester A downloads Requester B's attachment directly by ID | `404 Not Found` or `403 Forbidden`; file not streamed | `server/tests/lab-02/attachments.api.test.ts` | Pass |
 | **API-09** | AC-04, FR-12 | API | Upload invalid file type/size to ticket (server-side check) | `400 Bad Request`; upload rejected | `server/tests/lab-02/attachments.api.test.ts` | Pass |
@@ -35,9 +35,9 @@ This plan is written before implementation begins and is intended to drive a Tes
 | **UI-03** | AC-07, BR-10 | UI | Create ticket form client-side validation and error state | Displays field errors; preserves form inputs | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
 | **UI-03b** | AC-23, BR-23 | UI | Invalid attachment selected (wrong type/size/6th file) | Client rejects immediately; no upload network request is fired | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
 | **UI-04** | AC-10, BR-11 | UI | Duplicate submission prevention | Submit button disabled and shows busy state during request | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
-| **UI-05** | AC-08, BR-12 | UI | My Tickets initial empty state (zero tickets) | Shows "Create your first ticket" call-to-action | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
-| **UI-06** | AC-09, BR-12 | UI | My Tickets no-results filter state (tickets exist, filter matches none) | Shows distinct "No results found" and "Clear Filters" action | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
-| **UI-07** | AC-11, BR-14 | UI | Switch requester updates ticket list | Old ticket state/filters/pagination clear; new requester tickets load | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
+| **UI-05** | AC-08, BR-12 | UI | My Tickets initial empty state (zero tickets) | Shows "Create your first ticket" call-to-action | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| **UI-06** | AC-09, BR-12 | UI | My Tickets no-results filter state (tickets exist, filter matches none) | Shows distinct "No results found" and "Clear Filters" action | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| **UI-07** | AC-11, BR-14 | UI | Switch requester updates ticket list | Old ticket state/filters/pagination clear; new requester tickets load | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
 | **UI-08** | AC-21 | UI | Attachment soft-removal modal cancel | Cancel leaves attachment unchanged (not removed) | `client/tests/lab-02/AttachmentSection.test.tsx` | Planned |
 | **UI-08b** | AC-22 | UI | Attachment soft-removal modal validation | Empty reason blocks submit with inline validation message | `client/tests/lab-02/AttachmentSection.test.tsx` | Planned |
 | **UI-09** | AC-16 | UI | Keyboard accessibility and focus indicator | Form fields, attachment control, and Submit reachable via Tab/Enter with visible focus | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
