@@ -11,9 +11,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: "#F5F7F6" }}>
-      {/* Top Header Bar (#006B3C) */}
-      <header className="app-header shadow-sm" style={{ backgroundColor: "#006B3C", color: "#FFFFFF" }}>
-        <div className="container-fluid max-width-1200 d-flex flex-wrap align-items-center justify-content-between py-2 px-3">
+      {/* 1. Header Bar: ใช้ container-fluid เพื่อให้โลโก้ชิดซ้ายสุดของจอ */}
+      <header className="shadow-sm w-100" style={{ backgroundColor: "#006B3C", color: "#FFFFFF" }}>
+        <div className="container-fluid px-4 py-2 d-flex flex-wrap align-items-center justify-content-between">
           {/* Logo */}
           <Link to="/tickets" className="d-flex align-items-center text-white text-decoration-none me-4">
             <svg
@@ -60,7 +60,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </Link>
           </nav>
 
-          {/* Development Requester identity pill */}
+          {/* Requester Identity */}
           <div className="d-flex align-items-center gap-2 mt-2 mt-sm-0">
             {currentRequester ? (
               <div
@@ -98,9 +98,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </div>
       </header>
 
-      {/* Main Content Area: ใช้ container-fluid max-width-1200 px-3 เพื่อให้แนวขอบซ้ายตรงกับ Header พอดี */}
-      <main className="flex-grow-1 container-fluid max-width-1200 py-4 px-3">
-        {children}
+      {/* 2. Main Area: ใช้ container-fluid px-4 ให้ตรงกับ Header เพื่อดึงรูปบ้านไปชิดซ้ายสุด */}
+      <main className="flex-grow-1 w-100">
+        <div className="container-fluid px-4 py-4">
+          {children}
+        </div>
       </main>
     </div>
   );

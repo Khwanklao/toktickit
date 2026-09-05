@@ -15,7 +15,7 @@
   --warning-bg: #FFFBEB;
   --info-blue: #0369A1;
   --info-bg: #EFF8FF;
-  
+
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-primary);
   background-color: var(--page-bg);
@@ -115,7 +115,6 @@ body {
 .app-header {
   background-color: var(--primary-green);
   color: #ffffff;
-  padding: 12px 24px;
 }
 
 .app-header a {
@@ -131,4 +130,10 @@ body {
 
 .app-header .nav-link.active {
   background-color: var(--secondary-green);
+}
+
+.max-width-1200 {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
