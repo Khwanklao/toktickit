@@ -10,6 +10,8 @@ export const RequesterSelector: React.FC = () => {
   const [selectedId, setSelectedId] = useState<number | "">(currentRequester ? currentRequester.id : "");
   const [dismissError, setDismissError] = useState<boolean>(false);
 
+  const effectiveSelectedId = selectedId !== "" ? selectedId : (currentRequester ? currentRequester.id : (requesters.length > 0 ? requesters[0].id : ""));
+
   useEffect(() => {
     if (currentRequester) {
       setSelectedId(currentRequester.id);
@@ -20,8 +22,8 @@ export const RequesterSelector: React.FC = () => {
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedId !== "" && typeof selectedId === "number") {
-      switchRequester(selectedId);
+    if (effectiveSelectedId !== "" && typeof effectiveSelectedId === "number") {
+      switchRequester(effectiveSelectedId);
       navigate("/tickets");
     }
   };
@@ -136,7 +138,7 @@ export const RequesterSelector: React.FC = () => {
                   id="requester-select"
                   data-testid="requester-select"
                   className="form-select py-2"
-                  value={selectedId}
+                  value={effectiveSelectedId}
                   onChange={(e) => setSelectedId(Number(e.target.value))}
                 >
                   {requesters.map((req) => (
@@ -195,7 +197,7 @@ export const RequesterSelector: React.FC = () => {
                 className="btn btn-success px-4 d-flex align-items-center gap-2"
                 style={{ backgroundColor: "#006B3C", borderColor: "#006B3C" }}
                 data-testid="continue-button"
-                disabled={status !== "success" || requesters.length === 0 || selectedId === ""}
+                disabled={status !== "success" || requesters.length === 0 || effectiveSelectedId === ""}
               >
                 <span>&rarr;</span> Continue
               </button>
