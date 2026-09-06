@@ -129,6 +129,30 @@ describe("GET /api/tickets API Integration Tests", () => {
       expect(resEmptySearch.status).toBe(200);
       expect(resEmptySearch.body.pagination.totalItems).toBe(resAll.body.pagination.totalItems);
     });
+
+    it("does NOT match query keywords present only in description field (FR-07)", async () => {
+      const uniqueDescriptionKeyword = `ZebraDescriptionOnly_${Date.now()}`;
+      const res = await request(app)
+        .post("/api/tickets")
+        .set("x-requester-id", "1")
+        .send({
+          categoryId: 1,
+          relatedSystemId: 1,
+          summary: "Ordinary Summary Text",
+          description: `Contains ${uniqueDescriptionKeyword} in description body`,
+          requestedPriority: "LOW",
+        });
+      expect(res.status).toBe(201);
+      const createdId = res.body.id;
+
+      const searchRes = await request(app)
+        .get(`/api/tickets?search=${uniqueDescriptionKeyword}`)
+        .set("x-requester-id", "1");
+
+      expect(searchRes.status).toBe(200);
+      const foundIds = searchRes.body.data.map((t: any) => t.id);
+      expect(foundIds).not.toContain(createdId);
+    });
   });
 
   describe("API-06: Filter and explicit sort tickets (FR-08, FR-09)", () => {
@@ -184,6 +208,28 @@ describe("GET /api/tickets API Integration Tests", () => {
       expect(fallbackRes.status).toBe(200);
       expect(fallbackRes.body.pagination.page).toBe(1);
       expect(fallbackRes.body.pagination.pageSize).toBe(10);
+    });
+
+    it("orders data by createdAt DESC by default with ticketNumber DESC secondary tie-breaker (BR-08, BR-17)", async () => {
+      const res = await request(app)
+        .get("/api/tickets?sortBy=createdAt&sortDir=desc")
+        .set("x-requester-id", "1");
+
+      expect(res.status).toBe(200);
+      const data = res.body.data;
+      if (data.length > 1) {
+        for (let i = 0; i < data.length - 1; i++) {
+          const current = data[i];
+          const next = data[i + 1];
+          const currentTime = new Date(current.createdAt).getTime();
+          const nextTime = new Date(next.createdAt).getTime();
+
+          expect(currentTime).toBeGreaterThanOrEqual(nextTime);
+          if (currentTime === nextTime) {
+            expect(current.ticketNumber.localeCompare(next.ticketNumber)).toBeGreaterThanOrEqual(0);
+          }
+        }
+      }
     });
 
     it("includes relation objects (category, relatedSystem) in ticket data items", async () => {
