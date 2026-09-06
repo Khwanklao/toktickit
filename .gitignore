@@ -13,3 +13,6 @@ server/prisma/*.db
 *.log
 .DS_Store
 server/uploads/
+# playwright test results
+test-results/
+playwright-report/

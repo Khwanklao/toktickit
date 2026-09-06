@@ -5,10 +5,8 @@ import { AppShell } from "./components/AppShell.js";
 import { RequesterSelector } from "./components/RequesterSelector.js";
 import { RouteGuard } from "./components/RouteGuard.js";
 import { MyTickets } from "./components/MyTickets.js";
-import {
-  CreateTicketPlaceholder,
-  TicketDetailPlaceholder,
-} from "./components/PlaceholderScreens.js";
+import { CreateTicket } from "./components/CreateTicket.js";
+import { TicketDetail } from "./components/TicketDetail.js";
 import "./index.css";
 
 const ProtectedAppLayout: React.FC = () => {
@@ -21,8 +19,8 @@ const ProtectedAppLayout: React.FC = () => {
         <div key={currentRequester?.id}>
           <Routes>
             <Route path="/tickets" element={<MyTickets />} />
-            <Route path="/tickets/new" element={<CreateTicketPlaceholder />} />
-            <Route path="/tickets/:id" element={<TicketDetailPlaceholder />} />
+            <Route path="/tickets/new" element={<CreateTicket />} />
+            <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="*" element={<Navigate to="/tickets" replace />} />
           </Routes>
         </div>
