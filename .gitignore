@@ -12,3 +12,7 @@ server/prisma/*.db
 # logs & OS
 *.log
 .DS_Store
+server/uploads/
+# playwright test results
+test-results/
+playwright-report/

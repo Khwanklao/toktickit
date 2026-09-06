@@ -2,12 +2,20 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { getPrisma } from "./prisma.js";
 
+import { ticketsRouter } from "./routes/tickets.js";
+import { attachmentsRouter } from "./routes/attachments.js";
+import { devRequestersRouter } from "./routes/dev-requesters.js";
+
 // The Express app is exported separately from app.listen() (see index.ts) so
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
 app.use(cors());          // already wired: lets the Vite dev server call this API
 app.use(express.json());
+
+app.use("/api/tickets", ticketsRouter);
+app.use("/api/attachments", attachmentsRouter);
+app.use("/api/dev", devRequestersRouter);
 
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
@@ -28,6 +36,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
@@ -39,6 +48,24 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(200).json(categories);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch categories" });
+  }
+});
+
+app.get("/api/related-systems", async (_req: Request, res: Response) => {
+  try {
+    const systems = await getPrisma().relatedSystem.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
+    res.status(200).json(systems);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch related systems" });
   }
 });
 

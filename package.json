@@ -7,9 +7,17 @@
     "test": "npm --prefix client test && npm --prefix server test",
     "test:client": "npm --prefix client test",
     "test:server": "npm --prefix server test",
+    "test:e2e": "playwright test",
     "dev:client": "npm --prefix client dev",
     "dev:server": "npm --prefix server dev",
     "build:client": "npm --prefix client build",
     "build:server": "npm --prefix server build"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^26.4.1"
   }
 }
