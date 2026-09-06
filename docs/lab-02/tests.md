@@ -119,4 +119,4 @@ npx playwright test
 | **Total** | **107** | **107** | **0** | **0** |
 
 ## 7. Known Limitations or Deferred Tests
-- All planned test suites (Server Unit, Server API, Client UI, Playwright E2E & Responsive, Screenshot Artifact Generation) are 100% implemented, verified, and passing without deferrals or skipped cases.
+- All planned test suites (Server Unit, Server API, Client UI, Playwright E2E & Responsive, Screenshot Artifact Generation) are 100% implemented, verified, and passing without deferrals or skipped cases.

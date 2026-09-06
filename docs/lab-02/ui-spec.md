@@ -201,15 +201,15 @@ Every badge pairs a background tint with an explicit textual label (never color 
 ---
 
 ## 8. Visual Inspection Checklist
-- [ ] No clipped labels, truncated badges, or cut-off buttons at any viewport[cite: 1].
-- [ ] No overlapping text or controls (e.g. validation message overlapping next field)[cite: 1].
-- [ ] No unintended horizontal scrolling at Mobile or Tablet widths[cite: 1].
-- [ ] Read-only, Disabled, Invalid, and Focused input states are visually distinct (3.2)[cite: 1].
-- [ ] All badges show text labels, not color swatches alone[cite: 1].
-- [ ] Sort indicator (chevron) reflects actual sort field and direction[cite: 1].
-- [ ] Empty State and No-Results State use different copy and imagery (`BR-12`)[cite: 1].
-- [ ] Attachment states (Idle, Valid, Invalid, Uploading, Upload-failed, Active, Soft-removed) are distinct[cite: 1].
-- [ ] Focus ring is visible on every interactive element during keyboard navigation[cite: 1].
+- [x] No clipped labels, truncated badges, or cut-off buttons at any viewport[cite: 1].
+- [x] No overlapping text or controls (e.g. validation message overlapping next field)[cite: 1].
+- [x] No unintended horizontal scrolling at Mobile or Tablet widths[cite: 1].
+- [x] Read-only, Disabled, Invalid, and Focused input states are visually distinct (3.2)[cite: 1].
+- [x] All badges show text labels, not color swatches alone[cite: 1].
+- [x] Sort indicator (chevron) reflects actual sort field and direction[cite: 1].
+- [x] Empty State and No-Results State use different copy and imagery (`BR-12`)[cite: 1].
+- [x] Attachment states (Idle, Valid, Invalid, Uploading, Upload-failed, Active, Soft-removed) are distinct[cite: 1].
+- [x] Focus ring is visible on every interactive element during keyboard navigation[cite: 1].
 
 ---
 

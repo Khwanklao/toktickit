@@ -1,0 +1,20 @@
+# Lab 2 — AI Use and Reflection
+
+**LLM/agent used:** Gemini 3.6 Flash , ChatGPT (GPT-5.6 Luna) , Claude Sonnet 5
+
+## Selected key prompts
+
+| # | Prompt (summarised)                                                                                                                                                                                                  | What I did with the result                                                                              |
+| - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1 | Set up the TokTickIT project foundation, including the React/TypeScript/Vite frontend, Express/TypeScript backend, Prisma PostgreSQL setup, testing configuration, project structure, `.gitignore`, and `README.md`. | Used the generated foundation as the starting structure for Lab 2.                                      |
+| 2 | Implement Issue 2 data models, Prisma migrations, and idempotent database seeding, including Requesters, Categories, Related Systems, and the ticket-number test.                                                    | Reviewed and integrated the generated database structure and seed data.                                 |
+| 3 | Implement the backend ticket creation service, ticket number generator, input validation, and `POST /api/tickets` endpoint.                                                                                          | Reviewed the implementation and adjusted it to match the project specification.                         |
+| 4 | Implement Issue 4 ticket management and listing APIs, including filtering, searching, sorting, pagination, ownership isolation, and ticket detail retrieval.                                                         | Reviewed the API behavior and verified it against the specification and tests.                          |
+| 5 | Implement Issue 5 attachment management APIs, including upload, metadata retrieval, file download, and soft-delete functionality with ownership validation and comprehensive tests.                                  | Reviewed the attachment API implementation and verified its behavior through tests.                     |
+| 6 | Implement Issue 6 frontend foundation and Development Requester identity, including the requester API, RequesterContext, shared API client, RequesterSelector, route guard, and requester switching lifecycle.       | Used the generated frontend foundation and reviewed its behavior against the UI and API specifications. |
+| 7 | Implement Issue 7 ticket-management frontend features, including the My Tickets page, ticket listing/search/filter/sort/pagination UI, and related responsive and UI behavior.                                       | Reviewed the implementation and tested the frontend behavior against the planned requirements.          |
+| 8 | Implement Issue 8 as the final Lab 2 feature, including the ticket creation and detail APIs, Create Ticket form, Ticket Detail view, attachment lifecycle UI, E2E/responsive tests, and project close-out tasks.     | Used the results to complete the final Lab 2 features, tests, documentation, and close-out checks.      |
+
+## Reflection
+
+AI was mainly used as a coding assistant to help implement features, generate tests, develop project specifications, and identify issues during development. After receiving the generated results, I reviewed the changes file by file to understand what was added or modified before using them. I then checked the implementation against the project specifications and tests and made manual adjustments when necessary, especially for incomplete or incorrect UI parts.
