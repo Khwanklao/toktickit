@@ -287,7 +287,7 @@ Retrieves the list of all tickets in the system with search, filter, sort, and p
   * `search` (string, optional): Case-insensitive search on `ticketNumber` or `title`
   * `categoryId` (UUID, optional): Filter by category ID
   * `status` (string, optional): Filter by status (`NEW`, `OPEN`, `IN_PROGRESS`, etc.)
-  * `itPriority` (string, optional): Filter by priority level (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+  * `itPriority` (string, optional): Filter by priority level (`LOW`, `MEDIUM`, `HIGH`, `URGENT`)
   * `ownerId` (string, optional): Filter by ticket owner, accepting 2 formats:
     * Literal string `"unassigned"`: filters only tickets with no owner (`ownerId IS NULL`)
     * Target User UUID: filters only tickets belonging to that staff member
@@ -360,7 +360,7 @@ Updates the operational priority level (`itPriority`)
 * **Request Body:**
 ```json
 {
-  "itPriority": "CRITICAL"
+  "itPriority": "URGENT"
 }
 ```
 * **Response `200 OK`:**
@@ -368,10 +368,10 @@ Updates the operational priority level (`itPriority`)
 {
   "ticketId": "uuid-ticket-1",
   "requestedPriority": "MEDIUM",
-  "itPriority": "CRITICAL"
+  "itPriority": "URGENT"
 }
 ```
-* **Error `400 Bad Request`:** `itPriority` value does not match the enum (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+* **Error `400 Bad Request`:** `itPriority` value does not match the enum (`LOW`, `MEDIUM`, `HIGH`, `URGENT`)
 * **Error `403 Forbidden`:** When an Administrator or Requester attempts to call this endpoint
 * **Error `404 Not Found`:** When the ticket ID is not found in the system
 
@@ -381,6 +381,23 @@ Updates the operational priority level (`itPriority`)
 Changes the ticket status according to the State Transition Matrix
 
 * **Access:** IT Staff Only (Admin: `403 Forbidden`)
+* **State Transition Rules:**
+  * Status changes must adhere to the permitted state machine (BR-14).
+  * Outgoing transitions from `REOPENED` allow workflow continuation: `REOPENED` → `IN_PROGRESS` (work resumes), `REOPENED` → `RESOLVED` (re-resolved), or `REOPENED` → `CANCELLED` (withdrawn/invalid).
+  * `CLOSED` and `CANCELLED` are terminal states; no further status changes are allowed.
+
+#### State Transition Matrix
+| Current Status | Allowed Target Statuses | Workflow Notes |
+|---|---|---|
+| `NEW` | `OPEN`, `CANCELLED` | Transitioned to `OPEN` upon owner assignment or investigation start |
+| `OPEN` | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED` | Investigation/work begins or waiting for user input |
+| `IN_PROGRESS` | `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Work pauses for requester info, resolves, or cancels |
+| `WAITING_FOR_REQUESTER` | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Requester responds/work resumes, resolves, or cancels |
+| `RESOLVED` | `CLOSED`, `REOPENED` | Confirmed solved (closed) or issue reoccurs (reopened) |
+| `REOPENED` | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Resumes work (`IN_PROGRESS`), direct re-resolution (`RESOLVED`), or cancelled (`CANCELLED`) |
+| `CLOSED` | *(Terminal State)* | Final state; no further transitions permitted |
+| `CANCELLED` | *(Terminal State)* | Final state; no further transitions permitted |
+
 * **Request Body:**
 ```json
 {

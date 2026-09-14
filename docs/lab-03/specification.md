@@ -74,7 +74,20 @@ Elevate the TokTickIT system into a production-ready application by replacing th
   * `IN_PROGRESS` → `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`
   * `WAITING_FOR_REQUESTER` → `IN_PROGRESS`, `RESOLVED`, `CANCELLED`
   * `RESOLVED` → `CLOSED`, `REOPENED`
+  * `REOPENED` → `IN_PROGRESS` (IT Staff resumes work), `RESOLVED` (Direct re-resolution after verification), `CANCELLED` (Issue determined invalid or withdrawn)
   * `CLOSED` and `CANCELLED` are terminal states; no further transitions are allowed.
+
+#### State Transition Matrix
+| Current Status | Allowed Target Statuses | Workflow Notes |
+|---|---|---|
+| `NEW` | `OPEN`, `CANCELLED` | Transitioned to `OPEN` upon owner assignment or investigation start |
+| `OPEN` | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED` | Investigation/work begins or waiting for user input |
+| `IN_PROGRESS` | `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Work pauses for requester info, resolves, or cancels |
+| `WAITING_FOR_REQUESTER` | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Requester responds/work resumes, resolves, or cancels |
+| `RESOLVED` | `CLOSED`, `REOPENED` | Confirmed solved (closed) or issue reoccurs (reopened) |
+| `REOPENED` | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Resumes work (`IN_PROGRESS`), direct re-resolution (`RESOLVED`), or cancelled (`CANCELLED`) |
+| `CLOSED` | *(Terminal State)* | Final state; no further transitions permitted |
+| `CANCELLED` | *(Terminal State)* | Final state; no further transitions permitted |
 * **BR-15 (Requester Resolution Limitation):** A Requester cannot directly set a ticket's status to `RESOLVED` or `CLOSED`. They may only signal "Problem Appears Resolved" (`isRequesterResolved = true`), which the system records for IT Staff to formally review and close.
 
 ### Comments & Notes Rules
@@ -135,7 +148,7 @@ enum TicketPriority {
   LOW
   MEDIUM
   HIGH
-  CRITICAL
+  URGENT
 }
 
 enum TicketStatus {
@@ -262,7 +275,7 @@ The system must include an idempotent seed script (`prisma/seed.ts`) that is saf
 
 **Realistic Tickets:**
 * Sample tickets distributed across all statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `CANCELLED`)
-* Distributed across all priority levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+* Distributed across all priority levels (`LOW`, `MEDIUM`, `HIGH`, `URGENT`)
 * Includes both assigned tickets (`ownerId != null`) and unassigned ones
 
 **Sample Comments & Notes:**
@@ -369,3 +382,6 @@ Handout item 4.5 states: *"Each Ticket may have one primary Ticket Owner who is 
 
 ### 11.3. Requester Resolution Flow
 When a Requester clicks "Problem Appears Resolved," the ticket's `status` is not changed to `RESOLVED` directly. Instead, the system records the flag `isRequesterResolved = true` and automatically adds a notification Public Comment to the ticket, so that IT Staff can review and confirm the formal transition to `RESOLVED` or `CLOSED`.
+
+### 11.4. Priority Enum Compatibility
+> Priority Enum Compatibility: Retained `URGENT` as the highest priority tier (replacing `CRITICAL`) to maintain schema continuity and backward compatibility with the Lab 2 database without destructive migrations.

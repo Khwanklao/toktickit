@@ -35,7 +35,7 @@ All badges use a compact bold font (Text XS, Bold), fully rounded corners (`roun
 | **Ticket Priority** | `Low` | `#F1F5F9` (Muted Gray) | `#475569` |
 | | `Medium` | `#FEF3C7` (Amber) | `#B45309` |
 | | `High` | `#FFEDD5` (Orange) | `#C2410C` |
-| | `Critical` | `#FEE2E2` (Soft Red) | `#B91C1C` |
+| | `Urgent` | `#FEE2E2` (Soft Red) | `#B91C1C` |
 | **Ticket Status** | `New` | `#E0E7FF` (Indigo Tint) | `#4338CA` |
 | | `Open` | `#DBEAFE` (Blue Tint) | `#1D4ED8` |
 | | `In Progress` | `#CCFBF1` (Teal Tint) | `#0F766E` |
@@ -140,7 +140,7 @@ The main screen for searching, filtering, and accessing tickets, for IT Staff an
   * **Search Bar:** A search field with a magnifying glass icon, placeholder: *"Search by ticket number or summary..."*, supporting debounced search
   * **Filter Triggers:** Dropdown filter buttons:
     * Category Filter (dropdown list of categories)
-    * IT Priority Filter (Low, Medium, High, Critical)
+    * IT Priority Filter (Low, Medium, High, Urgent)
     * Status Filter (New, Open, In Progress, Waiting for Requester, Resolved, Closed, Reopened, Cancelled)
     * Owner Filter (All, Unassigned, Assigned to Me, Specific Active Staff/Admin)
   * **Counter Text:** Displays a result count, e.g., *"Showing 1 to 10 of 87 tickets"*
@@ -169,7 +169,7 @@ The screen for IT Staff to review and manage work on a ticket
   * Row 2: `Requester` (name and email), `Requested Priority` (badge - read-only), `Current Status` (a dropdown letting IT Staff change status per the Transition Matrix)
   * Row 3:
     * `Ticket Owner` (an assignment dropdown, or a "Claim Ticket" button): **the dropdown list shows every Active IT Staff member and Active Administrator in the system**, or the option to select Unassigned
-    * `IT Priority` (a dropdown to adjust Low/Medium/High/Critical, IT Staff only)
+    * `IT Priority` (a dropdown to adjust Low/Medium/High/Urgent, IT Staff only)
 * **Ticket Content Section:**
   * `Summary` (the subject line - light gray background, read-only)
   * `Description` (problem details - a multi-line box, read-only)
