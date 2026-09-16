@@ -145,7 +145,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
           storedFileName: "uuid-active_log.txt",
           mimeType: "text/plain",
           fileSize: 1024,
-          uploadedBy: 1,
+          uploadedBy: "1",
           isRemoved: false,
         },
       });
@@ -157,10 +157,10 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
           storedFileName: "uuid-deleted_log.txt",
           mimeType: "text/plain",
           fileSize: 2048,
-          uploadedBy: 1,
+          uploadedBy: "1",
           isRemoved: true,
           removedAt: new Date(),
-          removedBy: 1,
+          removedBy: "1",
           removalReason: "Test removal",
         },
       });

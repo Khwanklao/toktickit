@@ -5,22 +5,30 @@ export const devRequestersRouter = Router();
 
 devRequestersRouter.get("/requesters", async (_req: Request, res: Response) => {
   try {
-    const requesters = await getPrisma().requesterUser.findMany({
+    const prisma = getPrisma();
+    const requesters = await prisma.user.findMany({
       where: {
+        role: "REQUESTER",
         isActive: true,
       },
       select: {
         id: true,
         name: true,
         email: true,
-        department: true,
       },
       orderBy: {
         id: "asc",
       },
     });
 
-    res.status(200).json(requesters);
+    const formatted = requesters.map((r) => ({
+      id: !isNaN(Number(r.id)) ? Number(r.id) : r.id,
+      name: r.name,
+      email: r.email,
+      department: "Engineering",
+    }));
+
+    res.status(200).json(formatted);
   } catch (error) {
     res.status(500).json({
       statusCode: 500,

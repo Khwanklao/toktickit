@@ -135,7 +135,10 @@ ticketsRouter.post("/", async (req: Request, res: Response) => {
       });
     });
 
-    return res.status(201).json(ticket);
+    return res.status(201).json({
+      ...ticket,
+      requesterId: !isNaN(Number(ticket.requesterId)) ? Number(ticket.requesterId) : ticket.requesterId,
+    });
   } catch (error) {
     return res.status(500).json({
       statusCode: 500,
@@ -318,7 +321,13 @@ ticketsRouter.get("/:id", async (req: Request, res: Response) => {
 
     const { requesterId: _, ...ticketDetail } = ticket;
 
-    return res.status(200).json(ticketDetail);
+    return res.status(200).json({
+      ...ticketDetail,
+      requester: {
+        ...ticketDetail.requester,
+        id: !isNaN(Number(ticketDetail.requester.id)) ? Number(ticketDetail.requester.id) : ticketDetail.requester.id,
+      },
+    });
   } catch (error) {
     return res.status(500).json({
       statusCode: 500,

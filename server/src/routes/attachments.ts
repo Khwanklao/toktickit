@@ -182,7 +182,7 @@ attachmentsRouter.delete("/:id", async (req: Request, res: Response) => {
       createdAt: updated.createdAt.toISOString(),
       isRemoved: updated.isRemoved,
       removedAt: updated.removedAt ? updated.removedAt.toISOString() : null,
-      removedBy: updated.removedBy,
+      removedBy: updated.removedBy ? (!isNaN(Number(updated.removedBy)) ? Number(updated.removedBy) : updated.removedBy) : null,
       removalReason: updated.removalReason,
     });
   } catch (error) {
