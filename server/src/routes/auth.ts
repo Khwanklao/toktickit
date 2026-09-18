@@ -3,6 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getPrisma } from "../prisma.js";
 import { validatePassword } from "../utils/password-validator.js";
+import { authenticateUser, AuthenticatedRequest } from "../utils/auth.js";
 
 export const authRouter = Router();
 
@@ -107,49 +108,15 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/me
-authRouter.get("/me", async (req: Request, res: Response) => {
+authRouter.get("/me", authenticateUser, async (req: Request, res: Response) => {
   try {
-    const token = req.cookies?.toktickit_session;
-
-    if (!token || typeof token !== "string") {
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Not authenticated.",
-        },
-      });
-    }
-
-    const prisma = getPrisma();
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { user: true },
-    });
-
-    if (!session || session.expiresAt < new Date() || !session.user.isActive) {
-      if (session) {
-        await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-      }
-      res.clearCookie("toktickit_session", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-      });
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Not authenticated.",
-        },
-      });
-    }
-
+    const user = (req as AuthenticatedRequest).user!;
     return res.status(200).json({
-      id: session.user.id,
-      name: session.user.name,
-      email: session.user.email,
-      role: session.user.role,
-      mustChangePassword: session.user.mustChangePassword,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
     });
   } catch (error) {
     return res.status(500).json({
@@ -162,29 +129,17 @@ authRouter.get("/me", async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/change-password (API-05, API-05b)
-authRouter.post("/change-password", async (req: Request, res: Response) => {
+authRouter.post("/change-password", authenticateUser, async (req: Request, res: Response) => {
   try {
-    const token = req.cookies?.toktickit_session;
-
-    if (!token || typeof token !== "string") {
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Not authenticated.",
-        },
-      });
-    }
-
+    const user = (req as AuthenticatedRequest).user!;
     const prisma = getPrisma();
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { user: true },
+
+    // Fetch full user record to verify passwordHash
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.id },
     });
 
-    if (!session || session.expiresAt < new Date() || !session.user.isActive) {
-      if (session) {
-        await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-      }
+    if (!fullUser || !fullUser.isActive) {
       return res.status(401).json({
         error: {
           code: "UNAUTHORIZED",
@@ -205,7 +160,7 @@ authRouter.post("/change-password", async (req: Request, res: Response) => {
     }
 
     // Verify current password against database hash
-    if (!bcrypt.compareSync(currentPassword, session.user.passwordHash)) {
+    if (!bcrypt.compareSync(currentPassword, fullUser.passwordHash)) {
       return res.status(400).json({
         error: {
           code: "INVALID_CURRENT_PASSWORD",
@@ -229,7 +184,7 @@ authRouter.post("/change-password", async (req: Request, res: Response) => {
     const newPasswordHash = bcrypt.hashSync(newPassword, 10);
 
     const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: fullUser.id },
       data: {
         passwordHash: newPasswordHash,
         mustChangePassword: false,
@@ -252,3 +207,4 @@ authRouter.post("/change-password", async (req: Request, res: Response) => {
     });
   }
 });
+

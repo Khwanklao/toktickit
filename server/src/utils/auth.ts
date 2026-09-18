@@ -1,7 +1,21 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
+import { Role } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 
-export async function authenticateRequester(req: Request, res: Response): Promise<string | null> {
+export interface AuthenticatedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  mustChangePassword: boolean;
+  isActive: boolean;
+}
+
+export interface AuthenticatedRequest extends Request {
+  user?: AuthenticatedUser;
+}
+
+export async function authenticateUser(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   const prisma = getPrisma();
 
   // 1. Check for session token in cookies
@@ -23,7 +37,7 @@ export async function authenticateRequester(req: Request, res: Response): Promis
           message: "Not authenticated.",
         },
       });
-      return null;
+      return;
     }
 
     // Check mandatory password change barrier
@@ -37,23 +51,41 @@ export async function authenticateRequester(req: Request, res: Response): Promis
             message: "Password change required before accessing the system.",
           },
         });
-        return null;
+        return;
       }
     }
 
-    return session.user.id;
+    req.user = {
+      id: session.user.id,
+      name: session.user.name,
+      email: session.user.email,
+      role: session.user.role,
+      mustChangePassword: session.user.mustChangePassword,
+      isActive: session.user.isActive,
+    };
+    return next();
   }
 
-  // 2. Legacy x-requester-id header support (for backwards compatibility)
+  // 2. Legacy x-requester-id header support (for backwards compatibility with Lab 2 tests)
   const rawHeader = req.headers["x-requester-id"];
 
   if (rawHeader === undefined || rawHeader === null || Array.isArray(rawHeader)) {
+    const reqPath = req.originalUrl.split("?")[0];
+    if (reqPath.startsWith("/api/auth/")) {
+      res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Not authenticated.",
+        },
+      });
+      return;
+    }
     res.status(400).json({
       statusCode: 400,
       error: "Bad Request",
       message: "Missing x-requester-id header",
     });
-    return null;
+    return;
   }
 
   const headerStr = String(rawHeader).trim();
@@ -63,7 +95,7 @@ export async function authenticateRequester(req: Request, res: Response): Promis
       error: "Bad Request",
       message: "Invalid x-requester-id header",
     });
-    return null;
+    return;
   }
 
   const user = await prisma.user.findUnique({
@@ -76,8 +108,57 @@ export async function authenticateRequester(req: Request, res: Response): Promis
       error: "Forbidden",
       message: "Requester is inactive or unauthorized",
     });
-    return null;
+    return;
   }
 
-  return user.id;
+  req.user = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    mustChangePassword: user.mustChangePassword,
+    isActive: user.isActive,
+  };
+  return next();
 }
+
+export function requireRole(...allowedRoles: Role[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Not authenticated.",
+        },
+      });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        error: {
+          code: "FORBIDDEN",
+          message: "Forbidden resource.",
+        },
+      });
+    }
+
+    next();
+  };
+}
+
+export async function authenticateRequester(req: Request, res: Response): Promise<string | null> {
+  const authReq = req as AuthenticatedRequest;
+  if (!authReq.user) {
+    let handled = false;
+    await authenticateUser(authReq, res, () => {
+      handled = true;
+    });
+
+    if (!handled || !authReq.user) {
+      return null;
+    }
+  }
+
+  return authReq.user.id;
+}
+
