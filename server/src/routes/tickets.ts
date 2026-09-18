@@ -3,9 +3,10 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { Role } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 import { generateTicketNumber } from "../utils/ticket-number.js";
-import { authenticateRequester } from "../utils/auth.js";
+import { authenticateUser, requireRole, authenticateRequester, AuthenticatedRequest } from "../utils/auth.js";
 import { validateAttachmentFile } from "../utils/attachment-validation.js";
 
 export const ticketsRouter = Router();
@@ -17,7 +18,7 @@ const VALID_SORT_FIELDS = ["createdAt", "updatedAt", "ticketNumber"];
 const VALID_SORT_DIRS = ["asc", "desc"];
 const ALLOWED_PAGE_SIZES = [10, 25, 50];
 
-ticketsRouter.post("/", async (req: Request, res: Response) => {
+ticketsRouter.post("/", authenticateUser, requireRole(Role.REQUESTER), async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -135,7 +136,10 @@ ticketsRouter.post("/", async (req: Request, res: Response) => {
       });
     });
 
-    return res.status(201).json(ticket);
+    return res.status(201).json({
+      ...ticket,
+      requesterId: !isNaN(Number(ticket.requesterId)) ? Number(ticket.requesterId) : ticket.requesterId,
+    });
   } catch (error) {
     return res.status(500).json({
       statusCode: 500,
@@ -145,7 +149,7 @@ ticketsRouter.post("/", async (req: Request, res: Response) => {
   }
 });
 
-ticketsRouter.get("/", async (req: Request, res: Response) => {
+ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -242,7 +246,7 @@ ticketsRouter.get("/", async (req: Request, res: Response) => {
   }
 });
 
-ticketsRouter.get("/:id", async (req: Request, res: Response) => {
+ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -308,7 +312,8 @@ ticketsRouter.get("/:id", async (req: Request, res: Response) => {
       },
     });
 
-    if (!ticket || ticket.requesterId !== requesterId) {
+    const user = (req as AuthenticatedRequest).user;
+    if (!ticket || (user?.role === Role.REQUESTER && ticket.requesterId !== requesterId)) {
       return res.status(404).json({
         statusCode: 404,
         error: "Not Found",
@@ -318,7 +323,13 @@ ticketsRouter.get("/:id", async (req: Request, res: Response) => {
 
     const { requesterId: _, ...ticketDetail } = ticket;
 
-    return res.status(200).json(ticketDetail);
+    return res.status(200).json({
+      ...ticketDetail,
+      requester: {
+        ...ticketDetail.requester,
+        id: !isNaN(Number(ticketDetail.requester.id)) ? Number(ticketDetail.requester.id) : ticketDetail.requester.id,
+      },
+    });
   } catch (error) {
     return res.status(500).json({
       statusCode: 500,
@@ -328,7 +339,7 @@ ticketsRouter.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
-ticketsRouter.post("/:id/attachments", (req: Request, res: Response) => {
+ticketsRouter.post("/:id/attachments", authenticateUser, requireRole(Role.REQUESTER), (req: Request, res: Response) => {
   upload.single("file")(req, res, async (err) => {
     try {
       // 1. Header Authentication

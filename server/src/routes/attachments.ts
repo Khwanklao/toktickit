@@ -1,12 +1,13 @@
 import { Router, Request, Response } from "express";
 import path from "path";
 import fs from "fs";
+import { Role } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
-import { authenticateRequester } from "../utils/auth.js";
+import { authenticateUser, requireRole, authenticateRequester, AuthenticatedRequest } from "../utils/auth.js";
 
 export const attachmentsRouter = Router();
 
-attachmentsRouter.get("/:id", async (req: Request, res: Response) => {
+attachmentsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -27,7 +28,8 @@ attachmentsRouter.get("/:id", async (req: Request, res: Response) => {
       include: { ticket: { select: { requesterId: true } } },
     });
 
-    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+    const user = (req as AuthenticatedRequest).user;
+    if (!attachment || (user?.role === Role.REQUESTER && attachment.ticket.requesterId !== requesterId)) {
       return res.status(404).json({
         statusCode: 404,
         error: "Not Found",
@@ -55,7 +57,7 @@ attachmentsRouter.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
-attachmentsRouter.get("/:id/download", async (req: Request, res: Response) => {
+attachmentsRouter.get("/:id/download", authenticateUser, async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -76,7 +78,8 @@ attachmentsRouter.get("/:id/download", async (req: Request, res: Response) => {
       include: { ticket: { select: { requesterId: true } } },
     });
 
-    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+    const user = (req as AuthenticatedRequest).user;
+    if (!attachment || (user?.role === Role.REQUESTER && attachment.ticket.requesterId !== requesterId)) {
       return res.status(404).json({
         statusCode: 404,
         error: "Not Found",
@@ -117,7 +120,7 @@ attachmentsRouter.get("/:id/download", async (req: Request, res: Response) => {
   }
 });
 
-attachmentsRouter.delete("/:id", async (req: Request, res: Response) => {
+attachmentsRouter.delete("/:id", authenticateUser, requireRole(Role.REQUESTER), async (req: Request, res: Response) => {
   try {
     const requesterId = await authenticateRequester(req, res);
     if (requesterId === null) return;
@@ -182,7 +185,7 @@ attachmentsRouter.delete("/:id", async (req: Request, res: Response) => {
       createdAt: updated.createdAt.toISOString(),
       isRemoved: updated.isRemoved,
       removedAt: updated.removedAt ? updated.removedAt.toISOString() : null,
-      removedBy: updated.removedBy,
+      removedBy: updated.removedBy ? (!isNaN(Number(updated.removedBy)) ? Number(updated.removedBy) : updated.removedBy) : null,
       removalReason: updated.removalReason,
     });
   } catch (error) {
@@ -193,3 +196,4 @@ attachmentsRouter.delete("/:id", async (req: Request, res: Response) => {
     });
   }
 });
+

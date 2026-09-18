@@ -1,14 +1,29 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 
+async function getAuthCookie(email = "req.active1@toktickit.local", password = "Password123!"): Promise<string> {
+  const loginRes = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password });
+  return loginRes.headers["set-cookie"][0];
+}
+
 describe("GET /api/tickets/:id API Integration Tests", () => {
+  let cookieReq1: string;
+  let cookieReq2: string;
+
+  beforeEach(async () => {
+    cookieReq1 = await getAuthCookie("req.active1@toktickit.local");
+    cookieReq2 = await getAuthCookie("req.active2@toktickit.local");
+  });
+
   describe("API-08 & AC-14: Ticket detail & ownership isolation (BR-04, FR-11)", () => {
     it("returns 200 OK with full ticket details when accessed by ticket owner", async () => {
       const createRes = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -22,7 +37,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
 
       const detailRes = await request(app)
         .get(`/api/tickets/${ticketId}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(detailRes.status).toBe(200);
       expect(detailRes.body.id).toBe(ticketId);
@@ -34,7 +49,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
 
       // Verify nested relations
       expect(detailRes.body).toHaveProperty("requester");
-      expect(detailRes.body.requester.id).toBe(1);
+      expect(Number(detailRes.body.requester.id)).toBe(1);
       expect(detailRes.body.requester).toHaveProperty("name");
       expect(detailRes.body.requester).toHaveProperty("email");
 
@@ -54,7 +69,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
       // Create ticket owned by Requester 1
       const createRes = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -67,7 +82,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
       // Requester 2 attempts to fetch Requester 1's ticket
       const detailRes = await request(app)
         .get(`/api/tickets/${ticketId}`)
-        .set("x-requester-id", "2");
+        .set("Cookie", [cookieReq2]);
 
       expect(detailRes.status).toBe(404);
       expect(detailRes.body.statusCode).toBe(404);
@@ -78,7 +93,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
     it("returns 404 Not Found when ticket ID does not exist in DB", async () => {
       const detailRes = await request(app)
         .get("/api/tickets/999999")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(detailRes.status).toBe(404);
       expect(detailRes.body.statusCode).toBe(404);
@@ -89,36 +104,39 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
     it("returns 404 Not Found for malformed ticket ID (abc, -1, 1.5)", async () => {
       const nonNumericRes = await request(app)
         .get("/api/tickets/abc")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
       expect(nonNumericRes.status).toBe(404);
       expect(nonNumericRes.body.error).toBe("Not Found");
 
       const negativeRes = await request(app)
         .get("/api/tickets/-1")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
       expect(negativeRes.status).toBe(404);
 
       const decimalRes = await request(app)
         .get("/api/tickets/1.5")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
       expect(decimalRes.status).toBe(404);
     });
 
-    it("returns 400 Bad Request when x-requester-id header is missing or invalid", async () => {
+    it("returns 401 Unauthorized when session cookie is missing or invalid", async () => {
       const missingRes = await request(app).get("/api/tickets/1");
-      expect(missingRes.status).toBe(400);
+      expect(missingRes.status).toBe(401);
+      expect(missingRes.body.error?.code).toBe("UNAUTHORIZED");
 
       const invalidRes = await request(app)
         .get("/api/tickets/1")
-        .set("x-requester-id", "invalid");
-      expect(invalidRes.status).toBe(400);
+        .set("Cookie", ["toktickit_session=invalid_token"]);
+      expect(invalidRes.status).toBe(401);
+      expect(invalidRes.body.error?.code).toBe("UNAUTHORIZED");
     });
 
-    it("returns 403 Forbidden when requester is inactive", async () => {
+    it("returns 401 Unauthorized when requester is inactive", async () => {
       const inactiveRes = await request(app)
-        .get("/api/tickets/1")
-        .set("x-requester-id", "5"); // Inactive user
-      expect(inactiveRes.status).toBe(403);
+        .post("/api/auth/login")
+        .send({ email: "req.inactive@toktickit.local", password: "Password123!" });
+      expect(inactiveRes.status).toBe(401);
+      expect(inactiveRes.body.error?.code).toBe("INVALID_CREDENTIALS");
     });
 
     it("excludes soft-deleted attachments (isRemoved: true) from the detail response", async () => {
@@ -127,7 +145,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
       // Create ticket for Requester 1
       const createRes = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -145,7 +163,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
           storedFileName: "uuid-active_log.txt",
           mimeType: "text/plain",
           fileSize: 1024,
-          uploadedBy: 1,
+          uploadedBy: "1",
           isRemoved: false,
         },
       });
@@ -157,10 +175,10 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
           storedFileName: "uuid-deleted_log.txt",
           mimeType: "text/plain",
           fileSize: 2048,
-          uploadedBy: 1,
+          uploadedBy: "1",
           isRemoved: true,
           removedAt: new Date(),
-          removedBy: 1,
+          removedBy: "1",
           removalReason: "Test removal",
         },
       });
@@ -168,7 +186,7 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
       // Fetch ticket details
       const detailRes = await request(app)
         .get(`/api/tickets/${ticketId}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(detailRes.status).toBe(200);
       const attachmentIds = detailRes.body.attachments.map((a: any) => a.id);
@@ -178,3 +196,4 @@ describe("GET /api/tickets/:id API Integration Tests", () => {
     });
   });
 });
+
