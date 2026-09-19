@@ -288,6 +288,39 @@ describe("API-04: Authorization, RBAC & Mandatory Password Change Barrier", () =
       expect(res.status).toBe(403);
       expect(res.body.error?.code).toBe("FORBIDDEN");
     });
+
+    it("API-19: returns 403 Forbidden when Requester attempts to view or post internal notes (GET/POST /api/tickets/:id/internal-notes)", async () => {
+      const reqLogin = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "req.active4@toktickit.local", password: "Password123!" });
+      
+      // First clear password change barrier if needed
+      const reqCookie = reqLogin.headers["set-cookie"][0];
+      await request(app)
+        .post("/api/auth/change-password")
+        .set("Cookie", [reqCookie])
+        .send({ currentPassword: "Password123!", newPassword: "NewSecur3#Password" });
+
+      const newLogin = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "req.active4@toktickit.local", password: "NewSecur3#Password" });
+      const activeReqCookie = newLogin.headers["set-cookie"][0];
+
+      const getRes = await request(app)
+        .get("/api/tickets/1/internal-notes")
+        .set("Cookie", [activeReqCookie]);
+
+      expect(getRes.status).toBe(403);
+      expect(getRes.body.error?.code).toBe("FORBIDDEN");
+
+      const postRes = await request(app)
+        .post("/api/tickets/1/internal-notes")
+        .set("Cookie", [activeReqCookie])
+        .send({ content: "Unauthorized note attempt" });
+
+      expect(postRes.status).toBe(403);
+      expect(postRes.body.error?.code).toBe("FORBIDDEN");
+    });
   });
 });
 

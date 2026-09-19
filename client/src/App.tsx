@@ -1,12 +1,15 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
+import { AuthProvider, useAuth } from "./context/AuthContext.js";
 import { AppShell } from "./components/AppShell.js";
 import { RequesterSelector } from "./components/RequesterSelector.js";
 import { RouteGuard } from "./components/RouteGuard.js";
 import { MyTickets } from "./components/MyTickets.js";
 import { CreateTicket } from "./components/CreateTicket.js";
 import { TicketDetail } from "./components/TicketDetail.js";
+import { StaffTicketQueue } from "./components/StaffTicketQueue.js";
+import { StaffTicketDetail } from "./components/StaffTicketDetail.js";
 import "./index.css";
 
 const ProtectedAppLayout: React.FC = () => {
@@ -15,12 +18,13 @@ const ProtectedAppLayout: React.FC = () => {
   return (
     <RouteGuard>
       <AppShell>
-        {/* Keying the page subtree on currentRequester.id ensures React unmounts & remounts on switch (BR-14, UI-07) */}
         <div key={currentRequester?.id}>
           <Routes>
             <Route path="/tickets" element={<MyTickets />} />
             <Route path="/tickets/new" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
+            <Route path="/staff/queue" element={<StaffTicketQueue />} />
+            <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
             <Route path="*" element={<Navigate to="/tickets" replace />} />
           </Routes>
         </div>
@@ -40,10 +44,12 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <RequesterProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </RequesterProvider>
+    <AuthProvider>
+      <RequesterProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </RequesterProvider>
+    </AuthProvider>
   );
 }

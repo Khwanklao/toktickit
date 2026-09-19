@@ -274,9 +274,17 @@ ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) 
         requestedPriority: true,
         itPriority: true,
         status: true,
+        isRequesterResolved: true,
         createdAt: true,
         updatedAt: true,
         requester: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        owner: {
           select: {
             id: true,
             name: true,
@@ -313,7 +321,12 @@ ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) 
     });
 
     const user = (req as AuthenticatedRequest).user;
-    if (!ticket || (user?.role === Role.REQUESTER && ticket.requesterId !== requesterId)) {
+    if (!user) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+    if (!ticket || (user.role === Role.REQUESTER && ticket.requesterId !== requesterId)) {
       return res.status(404).json({
         statusCode: 404,
         error: "Not Found",
@@ -324,7 +337,16 @@ ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) 
     const { requesterId: _, ...ticketDetail } = ticket;
 
     return res.status(200).json({
+      ticket: {
+        ...ticketDetail,
+        title: ticketDetail.summary,
+        requester: {
+          ...ticketDetail.requester,
+          id: !isNaN(Number(ticketDetail.requester.id)) ? Number(ticketDetail.requester.id) : ticketDetail.requester.id,
+        },
+      },
       ...ticketDetail,
+      title: ticketDetail.summary,
       requester: {
         ...ticketDetail.requester,
         id: !isNaN(Number(ticketDetail.requester.id)) ? Number(ticketDetail.requester.id) : ticketDetail.requester.id,
@@ -466,4 +488,358 @@ ticketsRouter.post("/:id/attachments", authenticateUser, requireRole(Role.REQUES
     }
   });
 });
+
+/**
+ * PATCH /api/tickets/:id/resolve-indication
+ * Access: Requester (Owned only)
+ */
+ticketsRouter.patch(
+  "/:id/resolve-indication",
+  authenticateUser,
+  requireRole(Role.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+      const idParam = req.params.id;
+      const ticketId = Number(idParam);
+
+      if (isNaN(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const prisma = getPrisma();
+      const existingTicket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+      });
+
+      if (!existingTicket || existingTicket.requesterId !== user.id) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const updatedTicket = await prisma.$transaction(async (tx) => {
+        const ticket = await tx.ticket.update({
+          where: { id: ticketId },
+          data: { isRequesterResolved: true },
+        });
+
+        await tx.publicComment.create({
+          data: {
+            ticketId,
+            authorId: user.id,
+            content: "[System] Requester indicated that the problem appears resolved.",
+          },
+        });
+
+        return ticket;
+      });
+
+      return res.status(200).json({
+        message: "Problem indicated as resolved by requester.",
+        ticket: {
+          id: updatedTicket.id,
+          status: updatedTicket.status,
+          isRequesterResolved: updatedTicket.isRequesterResolved,
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: {
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to set requester resolve indication",
+        },
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/tickets/:id/comments
+ * Access: Requester (Owned only), IT Staff, Administrator
+ */
+ticketsRouter.get("/:id/comments", authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+    const idParam = req.params.id;
+    const ticketId = Number(idParam);
+
+    if (isNaN(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found" },
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, requesterId: true },
+    });
+
+    if (!ticket || (user.role === Role.REQUESTER && ticket.requesterId !== user.id)) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found" },
+      });
+    }
+
+    const comments = await prisma.publicComment.findMany({
+      where: { ticketId },
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        author: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return res.status(200).json({
+      comments: comments.map((c) => ({
+        id: c.id,
+        author: c.author,
+        content: c.content,
+        createdAt: c.createdAt.toISOString(),
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch comments" },
+    });
+  }
+});
+
+/**
+ * POST /api/tickets/:id/comments
+ * Access: Requester (Owned only), IT Staff, Administrator
+ */
+ticketsRouter.post("/:id/comments", authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+    const idParam = req.params.id;
+    const ticketId = Number(idParam);
+
+    if (isNaN(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found" },
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, requesterId: true },
+    });
+
+    if (!ticket || (user.role === Role.REQUESTER && ticket.requesterId !== user.id)) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found" },
+      });
+    }
+
+    const { content } = req.body || {};
+    if (typeof content !== "string" || content.trim().length === 0 || content.length > 2000) {
+      return res.status(400).json({
+        error: {
+          code: "BAD_REQUEST",
+          message: "Comment content must be non-empty and up to 2,000 characters.",
+        },
+      });
+    }
+
+    const comment = await prisma.$transaction(async (tx) => {
+      return await tx.publicComment.create({
+        data: {
+          ticketId,
+          authorId: user.id,
+          content: content.trim(),
+        },
+        include: {
+          author: {
+            select: { id: true, name: true, role: true },
+          },
+        },
+      });
+    });
+
+    return res.status(201).json({
+      comment: {
+        id: comment.id,
+        authorId: comment.authorId,
+        author: comment.author,
+        content: comment.content,
+        createdAt: comment.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create comment" },
+    });
+  }
+});
+
+/**
+ * GET /api/tickets/:id/internal-notes
+ * Access: IT Staff, Administrator ONLY (Requester -> 403 Forbidden, 0 leakage)
+ */
+ticketsRouter.get(
+  "/:id/internal-notes",
+  authenticateUser,
+  requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const idParam = req.params.id;
+      const ticketId = Number(idParam);
+
+      if (isNaN(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const notes = await prisma.internalNote.findMany({
+        where: { ticketId },
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
+          author: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      return res.status(200).json({
+        notes: notes.map((n) => ({
+          id: n.id,
+          author: n.author,
+          content: n.content,
+          createdAt: n.createdAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch internal notes" },
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/tickets/:id/internal-notes
+ * Access: IT Staff, Administrator ONLY (Requester -> 403 Forbidden)
+ */
+ticketsRouter.post(
+  "/:id/internal-notes",
+  authenticateUser,
+  requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+      const idParam = req.params.id;
+      const ticketId = Number(idParam);
+
+      if (isNaN(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found" },
+        });
+      }
+
+      const { content } = req.body || {};
+      if (typeof content !== "string" || content.trim().length === 0 || content.length > 2000) {
+        return res.status(400).json({
+          error: {
+            code: "BAD_REQUEST",
+            message: "Internal note content must be non-empty and up to 2,000 characters.",
+          },
+        });
+      }
+
+      const note = await prisma.$transaction(async (tx) => {
+        return await tx.internalNote.create({
+          data: {
+            ticketId,
+            authorId: user.id,
+            content: content.trim(),
+          },
+          include: {
+            author: {
+              select: { id: true, name: true, role: true },
+            },
+          },
+        });
+      });
+
+      return res.status(201).json({
+        note: {
+          id: note.id,
+          authorId: note.authorId,
+          author: note.author,
+          content: note.content,
+          createdAt: note.createdAt.toISOString(),
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create internal note" },
+      });
+    }
+  }
+);
 
