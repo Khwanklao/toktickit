@@ -37,6 +37,7 @@ export async function apiFetch(endpoint: string, options: RequestOptions = {}): 
   }
 
   return fetch(url, {
+    credentials: "include",
     ...options,
     headers,
   });
@@ -61,6 +62,18 @@ export const apiClient = {
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.message || `Request failed with status ${res.status}`);
+    }
+    return res.json();
+  },
+  async patch<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    const res = await apiFetch(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || errorData.error?.message || `Request failed with status ${res.status}`);
     }
     return res.json();
   },
