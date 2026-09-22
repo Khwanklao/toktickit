@@ -1,14 +1,38 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../../src/App.js";
 import * as api from "../../src/api.js";
 
 describe("App", () => {
-  // WORKED EXAMPLE — provided for you.
-  it("renders the TokTickIT heading", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/auth/me")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: null }), { status: 401 })
+        );
+      }
+      if (url.includes("/api/dev/requesters")) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), { status: 200 })
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the TokTickIT heading", async () => {
     render(<App />);
-    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(await screen.findByText(/TokTickIT/i)).toBeInTheDocument();
   });
 
   it("shows Online and the seeded categories on success", async () => {
@@ -24,10 +48,10 @@ describe("App", () => {
     });
 
     render(<App />);
-    const button = screen.getByRole("button", { name: /Check System/i });
+    const button = await screen.findByRole("button", { name: /Check System/i });
     await userEvent.click(button);
 
-    expect(screen.getByText(/System Status: Online/i)).toBeInTheDocument();
+    expect(await screen.findByText(/System Status: Online/i)).toBeInTheDocument();
     expect(screen.getByText(/Supported Request Categories/i)).toBeInTheDocument();
     for (const cat of mockCategories) {
       expect(screen.getByText(cat.name)).toBeInTheDocument();
@@ -40,10 +64,11 @@ describe("App", () => {
     );
 
     render(<App />);
-    const button = screen.getByRole("button", { name: /Check System/i });
+    const button = await screen.findByRole("button", { name: /Check System/i });
     await userEvent.click(button);
 
-    expect(screen.getByText(/System Status: Offline/i)).toBeInTheDocument();
+    expect(await screen.findByText(/System Status: Offline/i)).toBeInTheDocument();
     expect(screen.getByText(/Unable to connect to TokTickIT API/i)).toBeInTheDocument();
   });
 });
+
