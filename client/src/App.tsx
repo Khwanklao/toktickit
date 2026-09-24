@@ -10,6 +10,7 @@ import { CreateTicket } from "./components/CreateTicket.js";
 import { TicketDetail } from "./components/TicketDetail.js";
 import { StaffTicketQueue } from "./components/StaffTicketQueue.js";
 import { StaffTicketDetail } from "./components/StaffTicketDetail.js";
+import { UserManagement } from "./components/UserManagement.js";
 import "./index.css";
 
 const ProtectedAppLayout: React.FC = () => {
@@ -25,6 +26,7 @@ const ProtectedAppLayout: React.FC = () => {
             <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/staff/queue" element={<StaffTicketQueue />} />
             <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
+            <Route path="/admin/users" element={<UserManagement />} />
             <Route path="*" element={<Navigate to="/tickets" replace />} />
           </Routes>
         </div>
