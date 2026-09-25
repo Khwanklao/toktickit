@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -17,6 +17,26 @@ describe("Administrator User Management API (API-20 to API-25)", () => {
   let mustChangeAdminUser: any;
   let staffUser: any;
   let requesterUser: any;
+
+  afterAll(async () => {
+    const hash = bcrypt.hashSync("Password123!", 10);
+    await prisma.user.updateMany({
+      where: {
+        email: {
+          in: [
+            "req.active1@toktickit.local",
+            "staff.alex@toktickit.local",
+            "admin.main@toktickit.local",
+            "admin.secondary@toktickit.local",
+          ],
+        },
+      },
+      data: {
+        passwordHash: hash,
+        mustChangePassword: false,
+      },
+    });
+  });
 
   beforeEach(async () => {
     const hash = bcrypt.hashSync("Password123!", 10);
@@ -434,6 +454,71 @@ describe("Administrator User Management API (API-20 to API-25)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBeDefined();
+    });
+
+    it("revokes target user's existing sessions so old cookie returns 401 while admin session remains valid", async () => {
+      // 1. Staff logs in to obtain an active session cookie
+      const staffLogin = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "staff.alex@toktickit.local", password: "Password123!" });
+      const staffLoginCookie = staffLogin.headers["set-cookie"][0];
+
+      // 2. Verify staff session is valid
+      const meBefore = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", [staffLoginCookie]);
+      expect(meBefore.status).toBe(200);
+
+      // 3. Admin resets staff's password
+      const resetRes = await request(app)
+        .post(`/api/admin/users/${staffUser.id}/reset-password`)
+        .set("Cookie", [adminCookie])
+        .send({ newInitialPassword: "NewResetPass123!" });
+      expect(resetRes.status).toBe(200);
+
+      // 4. Staff's old session cookie must now return 401 Unauthorized
+      const meAfter = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", [staffLoginCookie]);
+      expect(meAfter.status).toBe(401);
+      expect(meAfter.body.error?.code).toBe("UNAUTHORIZED");
+
+      // 5. Admin's own session must remain valid
+      const adminMe = await request(app)
+        .get("/api/admin/users")
+        .set("Cookie", [adminCookie]);
+      expect(adminMe.status).toBe(200);
+    });
+
+    it("allows target user to log in again with new initial password and receive new session with mustChangePassword = true", async () => {
+      // Admin resets staff password
+      await request(app)
+        .post(`/api/admin/users/${staffUser.id}/reset-password`)
+        .set("Cookie", [adminCookie])
+        .send({ newInitialPassword: "NewResetPass123!" });
+
+      // Staff logs in with new password
+      const loginRes = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "staff.alex@toktickit.local", password: "NewResetPass123!" });
+
+      expect(loginRes.status).toBe(200);
+      expect(loginRes.body.mustChangePassword).toBe(true);
+      expect(loginRes.headers["set-cookie"]).toBeDefined();
+    });
+
+    it("succeeds normally without error when resetting password for a target user with no existing active sessions", async () => {
+      // Ensure target user has no sessions in DB
+      await prisma.session.deleteMany({ where: { userId: requesterUser.id } });
+
+      const res = await request(app)
+        .post(`/api/admin/users/${requesterUser.id}/reset-password`)
+        .set("Cookie", [adminCookie])
+        .send({ newInitialPassword: "NewResetPass123!" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Initial password reset successfully.");
+      expect(res.body.mustChangePassword).toBe(true);
     });
   });
 });

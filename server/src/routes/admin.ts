@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { getPrisma } from "../prisma.js";
-import { authenticateUser, requireRole, AuthenticatedRequest } from "../utils/auth.js";
+import { authenticateUser, requireRole, revokeUserSessions, AuthenticatedRequest } from "../utils/auth.js";
 import { validatePassword } from "../utils/password-validator.js";
 
 export const adminRouter = Router();
@@ -340,6 +340,9 @@ adminRouter.post("/:id/reset-password", async (req: AuthenticatedRequest, res: R
       mustChangePassword: true,
     },
   });
+
+  // Revoke target user's existing sessions
+  await revokeUserSessions(id);
 
   res.status(200).json({
     message: "Initial password reset successfully.",
