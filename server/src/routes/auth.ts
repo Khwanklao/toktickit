@@ -3,7 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getPrisma } from "../prisma.js";
 import { validatePassword } from "../utils/password-validator.js";
-import { authenticateUser, AuthenticatedRequest } from "../utils/auth.js";
+import { authenticateUser, AuthenticatedRequest, revokeUserSessions } from "../utils/auth.js";
 
 export const authRouter = Router();
 
@@ -190,6 +190,8 @@ authRouter.post("/change-password", authenticateUser, async (req: Request, res: 
         mustChangePassword: false,
       },
     });
+
+    await revokeUserSessions(fullUser.id);
 
     return res.status(200).json({
       id: updatedUser.id,

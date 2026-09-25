@@ -115,4 +115,11 @@ export async function authenticateRequester(req: Request, res: Response): Promis
   return authReq.user.id;
 }
 
+export async function revokeUserSessions(userId: string): Promise<void> {
+  const prisma = getPrisma();
+  await prisma.session.deleteMany({
+    where: { userId },
+  }).catch(() => {});
+}
+
 

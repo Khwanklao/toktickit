@@ -616,6 +616,7 @@ Edits a user's basic information (name, email, role, Active/Inactive status)
 Sets a new initial password for a user and sets the mandatory password-change flag
 
 * **Access:** Administrator Only
+* **Side Effects:** Revokes all existing sessions of the target user, requiring them to re-authenticate with the new initial password.
 * **Request Body:**
 ```json
 {

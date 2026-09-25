@@ -8,6 +8,7 @@ import { attachmentsRouter } from "./routes/attachments.js";
 import { devRequestersRouter } from "./routes/dev-requesters.js";
 import { authRouter } from "./routes/auth.js";
 import { staffRouter } from "./routes/staff.js";
+import { adminRouter } from "./routes/admin.js";
 
 // The Express app is exported separately from app.listen() (see index.ts) so
 // Supertest can import `app` without opening a port. Do not merge these files.
@@ -19,6 +20,7 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRouter);
 app.use("/api/staff", staffRouter);
+app.use("/api/admin/users", adminRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/attachments", attachmentsRouter);
 app.use("/api/dev", devRequestersRouter);
