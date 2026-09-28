@@ -44,7 +44,6 @@ export const StaffTicketQueue: React.FC = () => {
     totalPages: 1,
   });
   const [categories, setCategories] = useState<Category[]>([]);
-  const [staffUsers, setStaffUsers] = useState<Array<{ id: string; name: string }>>([]);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -135,7 +134,7 @@ export const StaffTicketQueue: React.FC = () => {
     fetchQueue();
   }, [fetchQueue]);
 
-  // Load categories & potential owners on mount
+  // Load categories on mount
   useEffect(() => {
     apiClient
       .get<Category[]>("/api/categories")
@@ -166,12 +165,12 @@ export const StaffTicketQueue: React.FC = () => {
 
   if (isForbidden) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-6" data-testid="forbidden-screen">
-        <h2 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h2>
-        <p className="text-gray-600 mb-4">You do not have permission to view the IT Staff Queue.</p>
+      <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center text-center p-4" data-testid="forbidden-screen">
+        <h2 className="h3 fw-bold text-danger mb-2">Access Denied</h2>
+        <p className="text-secondary mb-4">You do not have permission to view the IT Staff Queue.</p>
         <button
           onClick={() => navigate("/")}
-          className="px-4 py-2 bg-[#1B4D3E] text-white rounded hover:bg-[#153C30]"
+          className="btn btn-primary-green px-4 py-2"
         >
           Return Home
         </button>
@@ -182,15 +181,30 @@ export const StaffTicketQueue: React.FC = () => {
   const startRecord = (pagination.page - 1) * pagination.limit + 1;
   const endRecord = Math.min(pagination.page * pagination.limit, pagination.totalRecords);
 
+  // Standard Pagination Window Calculation
+  const getPageNumbers = (current: number, total: number) => {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages: (number | string)[] = [1];
+    if (current > 3) pages.push("...");
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (current < total - 2) pages.push("...");
+    pages.push(total);
+    return pages;
+  };
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header & Role Audit Notice */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="container-fluid max-width-1200 py-4 px-3 px-md-4">
+      {/* Header & Title */}
+      <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A202C]">
+          <h1 className="h3 fw-bold mb-1" style={{ color: "#1A202C" }}>
             {user?.role === "ADMINISTRATOR" ? "IT Staff Ticket Queue (Audit Mode)" : "IT Staff Ticket Queue"}
           </h1>
-          <p className="text-sm text-[#718096]">
+          <p className="text-muted small mb-0">
             {user?.role === "ADMINISTRATOR"
               ? "Read-only access for administrative auditing and monitoring."
               : "Search, filter, and manage support tickets."}
@@ -201,13 +215,13 @@ export const StaffTicketQueue: React.FC = () => {
       {/* Network Error Alert */}
       {error && (
         <div
-          className="p-4 rounded-md bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] flex items-center justify-between"
+          className="alert alert-danger d-flex align-items-center justify-content-between mb-4 p-3 rounded-3"
           data-testid="queue-error-alert"
         >
-          <span>{error}</span>
+          <span className="small font-medium">{error}</span>
           <button
             onClick={fetchQueue}
-            className="px-3 py-1 bg-[#DC2626] text-white text-sm rounded hover:bg-red-700"
+            className="btn btn-sm btn-danger px-3 py-1 ms-3"
           >
             Retry
           </button>
@@ -215,85 +229,98 @@ export const StaffTicketQueue: React.FC = () => {
       )}
 
       {/* Search & Filter Controls Toolbar */}
-      <div className="bg-white p-4 rounded-lg border border-[#E2E8F0] shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Search Field */}
-          <div className="relative lg:col-span-2">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-              🔍
-            </span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by ticket number or summary..."
-              className="w-full pl-9 pr-3 py-2 border border-[#E2E8F0] rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
-              data-testid="search-input"
-            />
+      <div className="surface-card bg-white p-3 p-md-4 rounded-3 border mb-4 shadow-sm">
+        <div className="row g-2 mb-3">
+          {/* Search Input Box */}
+          <div className="col-12 col-lg-4">
+            <div className="input-group">
+              <span className="input-group-text bg-white border-end-0 text-muted">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by ticket number or summary..."
+                className="form-control border-start-0 ps-0"
+                data-testid="search-input"
+              />
+            </div>
           </div>
 
           {/* Category Filter */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full p-2 border border-[#E2E8F0] rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
-            data-testid="filter-category"
-          >
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="col-12 col-sm-6 col-lg-2">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="form-select"
+              data-testid="filter-category"
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* IT Priority Filter */}
-          <select
-            value={selectedPriority}
-            onChange={(e) => setSelectedPriority(e.target.value)}
-            className="w-full p-2 border border-[#E2E8F0] rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
-            data-testid="filter-priority"
-          >
-            <option value="">All Priorities</option>
-            <option value="LOW">Low</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HIGH">High</option>
-            <option value="URGENT">Urgent</option>
-          </select>
+          <div className="col-12 col-sm-6 col-lg-2">
+            <select
+              value={selectedPriority}
+              onChange={(e) => setSelectedPriority(e.target.value)}
+              className="form-select"
+              data-testid="filter-priority"
+            >
+              <option value="">All Priorities</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
 
           {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full p-2 border border-[#E2E8F0] rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
-            data-testid="filter-status"
-          >
-            <option value="">All Statuses</option>
-            <option value="NEW">New</option>
-            <option value="OPEN">Open</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="CLOSED">Closed</option>
-            <option value="REOPENED">Reopened</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
+          <div className="col-12 col-sm-6 col-lg-2">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="form-select"
+              data-testid="filter-status"
+            >
+              <option value="">All Statuses</option>
+              <option value="NEW">New</option>
+              <option value="OPEN">Open</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
+              <option value="RESOLVED">Resolved</option>
+              <option value="CLOSED">Closed</option>
+              <option value="REOPENED">Reopened</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
 
           {/* Owner Filter */}
-          <select
-            value={selectedOwner}
-            onChange={(e) => setSelectedOwner(e.target.value)}
-            className="w-full p-2 border border-[#E2E8F0] rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
-            data-testid="filter-owner"
-          >
-            <option value="">All Owners</option>
-            <option value="unassigned">Unassigned</option>
-            <option value="me">Assigned to Me</option>
-          </select>
+          <div className="col-12 col-sm-6 col-lg-2">
+            <select
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              className="form-select"
+              data-testid="filter-owner"
+            >
+              <option value="">All Owners</option>
+              <option value="unassigned">Unassigned</option>
+              <option value="me">Assigned to Me</option>
+            </select>
+          </div>
         </div>
 
-        {/* Counter & Clear Filters Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-[#718096] pt-2 border-t border-[#F1F3F2] gap-2">
+        {/* Result Counter & Clear Filters CTA */}
+        <div className="d-flex flex-wrap align-items-center justify-content-between pt-2 border-top text-muted small gap-2">
           <span data-testid="result-counter">
             {pagination.totalRecords > 0
               ? `Showing ${startRecord} to ${endRecord} of ${pagination.totalRecords} tickets`
@@ -302,7 +329,8 @@ export const StaffTicketQueue: React.FC = () => {
           {(search || selectedCategory || selectedPriority || selectedStatus || selectedOwner) && (
             <button
               onClick={clearFilters}
-              className="text-[#1B4D3E] font-semibold hover:underline self-start sm:self-auto"
+              className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold"
+              style={{ color: "#1B4D3E" }}
               data-testid="clear-filters-btn"
             >
               Clear Filters
@@ -311,104 +339,117 @@ export const StaffTicketQueue: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Data Content Area */}
+      {/* Content Area */}
       {loading ? (
-        <div className="space-y-3" data-testid="queue-skeleton">
+        <div className="surface-card bg-white p-4 rounded-3 border shadow-sm" data-testid="queue-skeleton">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-gray-200 animate-pulse rounded-md" />
+            <div key={i} className="placeholder-glow mb-2">
+              <span className="placeholder col-12 py-3 rounded"></span>
+            </div>
           ))}
         </div>
       ) : tickets.length === 0 ? (
         debouncedSearch || selectedCategory || selectedPriority || selectedStatus || selectedOwner ? (
           /* No-Results State */
-          <div className="bg-white p-12 text-center rounded-lg border border-[#E2E8F0]" data-testid="no-results-state">
-            <div className="text-4xl mb-3">🔍</div>
-            <h3 className="text-lg font-semibold text-[#1A202C]">No tickets found matching your criteria</h3>
-            <p className="text-sm text-[#718096] mt-1 mb-4">Try adjusting your filter selections or search terms.</p>
+          <div className="surface-card bg-white p-5 text-center rounded-3 border shadow-sm my-3" data-testid="no-results-state">
+            <div className="d-inline-flex align-items-center justify-content-center mb-3 text-muted" style={{ fontSize: "2rem" }}>
+              🔍
+            </div>
+            <h3 className="h5 fw-bold mb-1" style={{ color: "#1A202C" }}>No tickets found matching your criteria</h3>
+            <p className="text-muted small mb-4">Try adjusting your filter selections or search terms.</p>
             <button
               onClick={clearFilters}
-              className="px-4 py-2 bg-[#1B4D3E] text-white text-sm font-medium rounded hover:bg-[#153C30]"
+              className="btn btn-primary-green px-4 py-2"
             >
               Clear Filters
             </button>
           </div>
         ) : (
-          /* Empty State (No tickets in system at all) */
-          <div className="bg-white p-12 text-center rounded-lg border border-[#E2E8F0]" data-testid="empty-state">
-            <div className="text-4xl mb-3">📋</div>
-            <h3 className="text-lg font-semibold text-[#1A202C]">No tickets currently in queue</h3>
-            <p className="text-sm text-[#718096] mt-1">There are no support tickets in the database.</p>
+          /* Empty State */
+          <div className="surface-card bg-white p-5 text-center rounded-3 border shadow-sm my-3" data-testid="empty-state">
+            <div className="d-inline-flex align-items-center justify-content-center mb-3 text-muted" style={{ fontSize: "2rem" }}>
+              📋
+            </div>
+            <h3 className="h5 fw-bold mb-1" style={{ color: "#1A202C" }}>No tickets currently in queue</h3>
+            <p className="text-muted small mb-0">There are no support tickets in the database.</p>
           </div>
         )
       ) : (
         <>
-          {/* Desktop Table View (≥ 768px / lg) */}
-          <div className="hidden md:block bg-white rounded-lg border border-[#E2E8F0] shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse" data-testid="desktop-queue-table">
-              <thead>
-                <tr className="bg-[#F1F3F2] text-[#1A202C] text-xs font-semibold uppercase tracking-wider border-b border-[#E2E8F0]">
+          {/* Desktop Table View (≥ 768px: d-none d-md-block) */}
+          <div className="d-none d-md-block surface-card bg-white rounded-3 border shadow-sm overflow-hidden mb-4">
+            <table className="table table-hover align-middle mb-0" data-testid="desktop-queue-table">
+              <thead className="table-light">
+                <tr className="text-uppercase small" style={{ color: "#5A6E63", fontSize: "0.75rem" }}>
                   <th
-                    className="p-3 cursor-pointer hover:bg-gray-200"
+                    scope="col"
+                    className="py-3 px-3 cursor-pointer"
                     onClick={() => handleSort("ticketNumber")}
                     data-testid="header-ticket-number"
                   >
                     Ticket No. {sortBy === "ticketNumber" && (sortOrder === "asc" ? "▲" : "▼")}
                   </th>
                   <th
-                    className="p-3 cursor-pointer hover:bg-gray-200"
+                    scope="col"
+                    className="py-3 px-3 cursor-pointer"
                     onClick={() => handleSort("createdAt")}
                     data-testid="header-created-at"
                   >
                     Created Date {sortBy === "createdAt" && (sortOrder === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="p-3">Summary</th>
-                  <th className="p-3">Category</th>
-                  <th className="p-3">Req. Priority</th>
+                  <th scope="col" className="py-3 px-3">Summary</th>
+                  <th scope="col" className="py-3 px-3">Category</th>
+                  <th scope="col" className="py-3 px-3">Req. Priority</th>
                   <th
-                    className="p-3 cursor-pointer hover:bg-gray-200"
+                    scope="col"
+                    className="py-3 px-3 cursor-pointer"
                     onClick={() => handleSort("itPriority")}
                     data-testid="header-it-priority"
                   >
                     IT Priority {sortBy === "itPriority" && (sortOrder === "asc" ? "▲" : "▼")}
                   </th>
                   <th
-                    className="p-3 cursor-pointer hover:bg-gray-200"
+                    scope="col"
+                    className="py-3 px-3 cursor-pointer"
                     onClick={() => handleSort("status")}
                     data-testid="header-status"
                   >
                     Status {sortBy === "status" && (sortOrder === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="p-3">Owner</th>
+                  <th scope="col" className="py-3 px-3">Owner</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E2E8F0] text-sm">
+              <tbody className="divide-y text-sm">
                 {tickets.map((t) => (
                   <tr
                     key={t.id}
                     onClick={() => navigate(`/staff/tickets/${t.id}`)}
-                    className="hover:bg-[#F7FAF8] cursor-pointer transition-colors duration-150"
+                    className="cursor-pointer"
+                    style={{ backgroundColor: "transparent" }}
                     data-testid={`queue-row-${t.id}`}
                   >
-                    <td className="p-3 font-semibold text-[#1B4D3E] whitespace-nowrap">{t.ticketNumber}</td>
-                    <td className="p-3 text-[#718096] whitespace-nowrap">
+                    <td className="py-3 px-3 fw-bold" style={{ color: "#1B4D3E" }}>{t.ticketNumber}</td>
+                    <td className="py-3 px-3 text-muted text-nowrap">
                       {new Date(t.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="p-3 font-medium text-[#1A202C] max-w-xs truncate">{t.summary || t.title}</td>
-                    <td className="p-3 text-[#718096]">{t.category?.name}</td>
-                    <td className="p-3">
+                    <td className="py-3 px-3 fw-medium text-dark text-truncate" style={{ maxWidth: "250px" }}>
+                      {t.summary || t.title}
+                    </td>
+                    <td className="py-3 px-3 text-muted">{t.category?.name}</td>
+                    <td className="py-3 px-3">
                       <PriorityBadge priority={t.requestedPriority} />
                     </td>
-                    <td className="p-3">
+                    <td className="py-3 px-3">
                       <PriorityBadge priority={t.itPriority || t.requestedPriority} />
                     </td>
-                    <td className="p-3">
+                    <td className="py-3 px-3">
                       <StatusBadge status={t.status} />
                     </td>
-                    <td className="p-3 text-xs text-[#718096]">
+                    <td className="py-3 px-3 small">
                       {t.owner ? (
-                        <span className="font-medium text-[#1A202C]">{t.owner.name}</span>
+                        <span className="fw-semibold text-dark">{t.owner.name}</span>
                       ) : (
-                        <span className="text-gray-400 italic">Unassigned</span>
+                        <span className="text-muted italic">Unassigned</span>
                       )}
                     </td>
                   </tr>
@@ -417,62 +458,85 @@ export const StaffTicketQueue: React.FC = () => {
             </table>
           </div>
 
-          {/* Mobile Card View (< 768px) */}
-          <div className="md:hidden space-y-3" data-testid="mobile-ticket-list">
+          {/* Mobile Card Stack View (< 768px: d-block d-md-none) */}
+          <div className="d-block d-md-none space-y-3 mb-4" data-testid="mobile-ticket-list">
             {tickets.map((t) => (
               <div
                 key={t.id}
                 onClick={() => navigate(`/staff/tickets/${t.id}`)}
-                className="bg-white p-4 rounded-lg border border-[#E2E8F0] shadow-sm cursor-pointer hover:border-[#1B4D3E] transition-all"
+                className="surface-card bg-white p-3 rounded-3 border shadow-sm mb-3 cursor-pointer"
                 data-testid="mobile-ticket-card"
               >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-bold text-[#1B4D3E] text-sm">{t.ticketNumber}</span>
+                {/* Top of Card */}
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="fw-bold text-success small" style={{ color: "#1B4D3E" }}>
+                    {t.ticketNumber}
+                  </span>
                   <StatusBadge status={t.status} />
                 </div>
-                <h4 className="font-semibold text-[#1A202C] text-base mb-2 line-clamp-2">{t.summary || t.title}</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs text-[#718096] mb-3">
-                  <div>Category: <span className="text-[#1A202C]">{t.category?.name}</span></div>
-                  <div>IT Priority: <PriorityBadge priority={t.itPriority || t.requestedPriority} /></div>
+
+                {/* Middle of Card */}
+                <h4 className="h6 fw-bold text-dark mb-2 text-truncate">{t.summary || t.title}</h4>
+                <div className="row g-1 text-muted small mb-3">
+                  <div className="col-6">
+                    <span className="fw-semibold text-secondary">Category:</span> {t.category?.name}
+                  </div>
+                  <div className="col-6 d-flex align-items-center gap-1">
+                    <span className="fw-semibold text-secondary">IT Priority:</span>
+                    <PriorityBadge priority={t.itPriority || t.requestedPriority} />
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-xs text-[#718096] pt-2 border-t border-[#F1F3F2]">
-                  <span>Owner: {t.owner ? t.owner.name : "Unassigned"}</span>
-                  <span>{new Date(t.createdAt).toLocaleDateString()}</span>
+
+                {/* Bottom of Card: Clean typography separation for Owner and Date */}
+                <div className="d-flex justify-content-between align-items-center text-muted small pt-2 border-top">
+                  <div>
+                    <span className="fw-semibold text-secondary">Owner:</span>{" "}
+                    <span className="text-dark font-medium">{t.owner ? t.owner.name : "Unassigned"}</span>
+                  </div>
+                  <div className="text-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Pagination Footer Controls */}
+          {/* Standard Pagination Window Controls */}
           {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-[#E2E8F0] shadow-sm">
+            <div className="surface-card bg-white p-3 rounded-3 border shadow-sm d-flex align-items-center justify-content-between">
               <button
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 border border-[#E2E8F0] text-sm font-medium rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="btn btn-secondary-custom btn-sm px-3"
                 data-testid="prev-page-btn"
               >
                 &lt; Previous
               </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((pg) => (
-                  <button
-                    key={pg}
-                    onClick={() => setCurrentPage(pg)}
-                    className={`w-8 h-8 text-xs font-semibold rounded-full ${
-                      pg === currentPage
-                        ? "bg-[#1B4D3E] text-white"
-                        : "text-[#1A202C] hover:bg-gray-100"
-                    }`}
-                  >
-                    {pg}
-                  </button>
+              
+              <div className="d-flex align-items-center gap-1">
+                {getPageNumbers(currentPage, pagination.totalPages).map((pg, idx) => (
+                  <React.Fragment key={idx}>
+                    {typeof pg === "number" ? (
+                      <button
+                        onClick={() => setCurrentPage(pg)}
+                        className={`btn btn-sm rounded-circle d-flex align-items-center justify-content-center ${
+                          pg === currentPage
+                            ? "btn-primary-green fw-bold"
+                            : "btn-light text-dark"
+                        }`}
+                        style={{ width: "32px", height: "32px", padding: 0 }}
+                      >
+                        {pg}
+                      </button>
+                    ) : (
+                      <span className="px-1 text-muted small">{pg}</span>
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
+
               <button
                 disabled={currentPage >= pagination.totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
-                className="px-3 py-1.5 border border-[#E2E8F0] text-sm font-medium rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="btn btn-secondary-custom btn-sm px-3"
                 data-testid="next-page-btn"
               >
                 Next &gt;
