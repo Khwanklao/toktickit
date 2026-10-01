@@ -2,8 +2,8 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Attachment Upload Failure and Retry E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem("toktickit_requester_id", "1");
+    await page.request.post("http://localhost:3000/api/auth/login", {
+      data: { email: "req.active1@toktickit.local", password: "Password123!" },
     });
     await page.goto("/tickets");
     await page.waitForSelector('[data-testid="my-tickets-screen"]');
