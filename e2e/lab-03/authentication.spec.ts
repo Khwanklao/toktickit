@@ -53,7 +53,7 @@ test.describe("Authentication & Mandatory Password Change E2E Tests (E2E-01 to E
     const initialPass = "Password123!";
     const newPass = "NewSecur3#Pass";
 
-    // --- E2E-02: Initial login forces redirect to /change-password ---
+    // --- E2E-03: Mandatory first-login password change ---
     await page.goto("/login");
     await page.fill("#email", targetEmail);
     await page.fill("#password", initialPass);
@@ -90,10 +90,11 @@ test.describe("Authentication & Mandatory Password Change E2E Tests (E2E-01 to E
     await page.waitForURL("**/tickets");
     await expect(page.locator('[data-testid="user-identity-pill"]')).toContainText("Active Requester 4");
 
-    // --- E2E-04: Sign out and login with new credentials ---
+    // --- E2E-04: Sign out and session invalidation ---
     await page.click('[data-testid="logout-button"]');
     await page.waitForURL("**/login");
 
+    // --- E2E-02: Failed login attempt with invalid/old credentials ---
     // 1. Attempt login with OLD password -> fails
     await page.fill("#email", targetEmail);
     await page.fill("#password", initialPass);

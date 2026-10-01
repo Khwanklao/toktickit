@@ -12,10 +12,10 @@ This document defines the Test-Driven Development (TDD) test plan and Acceptance
 * **Migration & Regression Tests:** Verify continuity of the existing schema from Lab 2, persistence of Ticket/Attachment data, and correct Requester functionality
 * **End-to-End (E2E) Tests:** Verify real user journeys through a Chromium browser using Playwright, covering every role
 
-### Test Execution Summary (Verified: September 30, 2026)
+### Test Execution Summary (Verified: October 1, 2026)
 * **Backend Integration & Unit Tests (`npm run test:server`):** 21 test suites passed, 146 total tests passed (0 failures).
 * **Frontend Component & UI Tests (`npm run test:client`):** 17 test suites passed, 52 total tests passed (0 failures).
-* **Playwright E2E Regression Suite (`npx playwright test`):** 20 functional E2E tests passed across 6 test suites with 0 regressions.
+* **Playwright E2E Regression Suite (`npx playwright test`):** 21 functional E2E tests passed across 6 test suites with 0 regressions.
 
 ---
 
@@ -128,9 +128,9 @@ npx playwright test e2e/lab-03/
 | Test ID | E2E Spec File | Test Block / Description | Requirement Definition | Execution Status |
 |---|---|---|---|---|
 | **E2E-01** | `e2e/lab-03/authentication.spec.ts` | `E2E-01: Successful login flow and role-based redirect for all roles` | Successful login flow for each role into the system (Redirected to role's dashboard with role badge displayed) | Passed |
-| **E2E-02** | `e2e/lab-03/authentication.spec.ts` | `E2E-02, E2E-03, E2E-04: Mandatory password change, complexity validation, sign out, and re-login` | Testing a failed login on a real browser (Screen remains on `/login`, displays red alert, no cookie created) | Passed |
-| **E2E-03** | `e2e/lab-03/authentication.spec.ts` | `E2E-02, E2E-03, E2E-04: Mandatory password change, complexity validation, sign out, and re-login` | Mandatory password change flow from First-login through to the main page (Forced redirect, real-time checklist validation, successful rotation) | Passed |
-| **E2E-04** | `e2e/lab-03/authentication.spec.ts` | `E2E-02, E2E-03, E2E-04: Mandatory password change, complexity validation, sign out, and re-login` | Clicking Sign Out from the Profile Dropdown (Session cleared, navigates to `/login`, Back button blocked) | Passed |
+| **E2E-02** | `e2e/lab-03/authentication.spec.ts` | `--- E2E-02: Failed login attempt with invalid/old credentials ---` | Testing a failed login on a real browser (Screen remains on `/login`, displays red alert, no cookie created) | Passed |
+| **E2E-03** | `e2e/lab-03/authentication.spec.ts` | `--- E2E-03: Mandatory first-login password change ---` | Mandatory password change flow from First-login through to the main page (Forced redirect, real-time checklist validation, successful rotation) | Passed |
+| **E2E-04** | `e2e/lab-03/authentication.spec.ts` | `--- E2E-04: Sign out and session invalidation ---` | Clicking Sign Out from the Profile Dropdown (Session cleared, navigates to `/login`, Back button blocked) | Passed |
 | **E2E-05** | `e2e/lab-03/staff-ticket-flow.spec.ts` | `E2E-05: Staff Ticket Management Flow` | Full end-to-end ticket management by IT Staff via a real browser (Staff login, queue navigation, claim/unassign, IT priority & status update, internal note) | Passed |
 | **E2E-06** | `e2e/lab-03/user-administration.spec.ts` | `E2E-06: Administrator User Management Flow` | Full end-to-end user management by Administrator via a real browser (Admin login, create user, reset password, verify deactivation) | Passed |
 
