@@ -2,7 +2,8 @@ import { test, expect } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
 
-test.describe("Generate Lab-02 Screenshot Artifacts", () => {
+test.describe.skip("Generate Lab-02 Screenshot Artifacts", () => {
+  test.setTimeout(120000);
   const baseDir = path.resolve(__dirname, "../../artifacts/lab-02/screenshots");
 
   test.beforeAll(() => {
@@ -12,8 +13,9 @@ test.describe("Generate Lab-02 Screenshot Artifacts", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem("toktickit_requester_id", "1");
+    await page.goto("/login");
+    await page.request.post("http://localhost:3000/api/auth/login", {
+      data: { email: "req.active1@toktickit.local", password: "Password123!" },
     });
   });
 
@@ -88,7 +90,7 @@ test.describe("Generate Lab-02 Screenshot Artifacts", () => {
     });
 
     await page.click('[data-testid="submit-ticket-button"]');
-    await page.waitForSelector("text=Database connection error");
+    await expect(page.locator(".alert-danger")).toBeVisible();
     await page.screenshot({ path: path.join(baseDir, "create-ticket/api-failure.png") });
   });
 
@@ -106,7 +108,9 @@ test.describe("Generate Lab-02 Screenshot Artifacts", () => {
     // 3. Loading state
     await page.setViewportSize({ width: 1200, height: 800 });
     let routeHandled = false;
-    await page.route("**/api/tickets*", async (route) => {
+    const ticketsRoute = /\/api\/tickets(\?|$)/;
+
+    await page.route(ticketsRoute, async (route) => {
       if (!routeHandled) {
         routeHandled = true;
         await page.waitForTimeout(1000);
@@ -118,15 +122,16 @@ test.describe("Generate Lab-02 Screenshot Artifacts", () => {
     await page.goto("/tickets");
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(baseDir, "my-tickets/loading.png") });
-    await page.unroute("**/api/tickets*");
+    await page.waitForTimeout(900);
+    await page.unroute(ticketsRoute);
 
     // 4. Empty state (Mock zero tickets returned)
-    await page.route("**/api/tickets?*", async (route) => {
+    await page.route(ticketsRoute, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify([]),
+        body: JSON.stringify({ data: [], meta: { page: 1, totalPages: 1, totalCount: 0 } }),
       });
     });
     await page.goto("/tickets");

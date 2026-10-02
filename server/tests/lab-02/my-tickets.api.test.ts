@@ -1,14 +1,29 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 
+async function getAuthCookie(email = "req.active1@toktickit.local", password = "Password123!"): Promise<string> {
+  const loginRes = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password });
+  return loginRes.headers["set-cookie"][0];
+}
+
 describe("GET /api/tickets API Integration Tests", () => {
+  let cookieReq1: string;
+  let cookieReq2: string;
+
+  beforeEach(async () => {
+    cookieReq1 = await getAuthCookie("req.active1@toktickit.local");
+    cookieReq2 = await getAuthCookie("req.active2@toktickit.local");
+  });
+
   describe("API-04: Fetch tickets scoped to active requester (BR-04, FR-06)", () => {
-    it("returns ONLY tickets belonging to the requester specified in x-requester-id", async () => {
+    it("returns ONLY tickets belonging to the authenticated requester", async () => {
       // Create ticket for Requester 1
       const res1 = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -22,7 +37,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       // Create ticket for Requester 2
       const res2 = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "2")
+        .set("Cookie", [cookieReq2])
         .send({
           categoryId: 2,
           relatedSystemId: 2,
@@ -36,7 +51,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       // Request tickets for Requester 1
       const getRes1 = await request(app)
         .get("/api/tickets")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(getRes1.status).toBe(200);
       expect(getRes1.body).toHaveProperty("data");
@@ -49,7 +64,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       // Request tickets for Requester 2
       const getRes2 = await request(app)
         .get("/api/tickets")
-        .set("x-requester-id", "2");
+        .set("Cookie", [cookieReq2]);
 
       expect(getRes2.status).toBe(200);
       const ticketNumbers2 = getRes2.body.data.map((t: any) => t.ticketNumber);
@@ -57,30 +72,36 @@ describe("GET /api/tickets API Integration Tests", () => {
       expect(ticketNumbers2).not.toContain(ticket1Number);
     });
 
-    it("returns 400 Bad Request when x-requester-id header is missing or malformed", async () => {
+    it("returns 401 Unauthorized when session cookie is missing or malformed", async () => {
       const missingRes = await request(app).get("/api/tickets");
-      expect(missingRes.status).toBe(400);
-      expect(missingRes.body.message).toBe("Missing x-requester-id header");
+      expect(missingRes.status).toBe(401);
+      expect(missingRes.body.error?.code).toBe("UNAUTHORIZED");
 
       const invalidRes = await request(app)
         .get("/api/tickets")
-        .set("x-requester-id", "abc");
-      expect(invalidRes.status).toBe(400);
-      expect(invalidRes.body.message).toBe("Invalid x-requester-id header");
+        .set("Cookie", ["toktickit_session=invalid_token"]);
+      expect(invalidRes.status).toBe(401);
+      expect(invalidRes.body.error?.code).toBe("UNAUTHORIZED");
     });
 
-    it("returns 403 Forbidden when requester is inactive or non-existent", async () => {
+    it("returns 401 Unauthorized when authenticating with inactive requester account", async () => {
       const inactiveRes = await request(app)
-        .get("/api/tickets")
-        .set("x-requester-id", "5"); // Inactive user
-      expect(inactiveRes.status).toBe(403);
-      expect(inactiveRes.body.error).toBe("Forbidden");
+        .post("/api/auth/login")
+        .send({
+          email: "req.inactive@toktickit.local",
+          password: "Password123!",
+        });
+      expect(inactiveRes.status).toBe(401);
+      expect(inactiveRes.body.error?.code).toBe("INVALID_CREDENTIALS");
 
       const nonExistentRes = await request(app)
-        .get("/api/tickets")
-        .set("x-requester-id", "999999");
-      expect(nonExistentRes.status).toBe(403);
-      expect(nonExistentRes.body.error).toBe("Forbidden");
+        .post("/api/auth/login")
+        .send({
+          email: "nonexistent@toktickit.local",
+          password: "Password123!",
+        });
+      expect(nonExistentRes.status).toBe(401);
+      expect(nonExistentRes.body.error?.code).toBe("INVALID_CREDENTIALS");
     });
   });
 
@@ -88,7 +109,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("filters tickets matching summary or ticketNumber case-insensitively", async () => {
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -101,7 +122,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       // Search by partial summary in lowercase
       const searchRes1 = await request(app)
         .get("/api/tickets?search=keyword%20alpha")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(searchRes1.status).toBe(200);
       const foundIds1 = searchRes1.body.data.map((t: any) => t.id);
@@ -110,7 +131,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       // Search by exact ticket number
       const searchRes2 = await request(app)
         .get(`/api/tickets?search=${createdTicket.ticketNumber}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(searchRes2.status).toBe(200);
       const foundIds2 = searchRes2.body.data.map((t: any) => t.id);
@@ -120,11 +141,11 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("treats empty string or whitespace-only search param as no filter applied", async () => {
       const resAll = await request(app)
         .get("/api/tickets")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       const resEmptySearch = await request(app)
         .get("/api/tickets?search=%20%20%20")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(resEmptySearch.status).toBe(200);
       expect(resEmptySearch.body.pagination.totalItems).toBe(resAll.body.pagination.totalItems);
@@ -134,7 +155,7 @@ describe("GET /api/tickets API Integration Tests", () => {
       const uniqueDescriptionKeyword = `ZebraDescriptionOnly_${Date.now()}`;
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({
           categoryId: 1,
           relatedSystemId: 1,
@@ -147,7 +168,7 @@ describe("GET /api/tickets API Integration Tests", () => {
 
       const searchRes = await request(app)
         .get(`/api/tickets?search=${uniqueDescriptionKeyword}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(searchRes.status).toBe(200);
       const foundIds = searchRes.body.data.map((t: any) => t.id);
@@ -159,7 +180,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("filters by categoryId, priority, and status correctly", async () => {
       const filterRes = await request(app)
         .get("/api/tickets?categoryId=1&priority=LOW&status=NEW")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(filterRes.status).toBe(200);
       filterRes.body.data.forEach((ticket: any) => {
@@ -172,7 +193,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("returns 200 OK with data: [] when categoryId yields no matching tickets", async () => {
       const nonExistentCatRes = await request(app)
         .get("/api/tickets?categoryId=999999")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(nonExistentCatRes.status).toBe(200);
       expect(nonExistentCatRes.body.data).toEqual([]);
@@ -182,7 +203,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("silently ignores invalid priority or status filters and returns 200 OK", async () => {
       const invalidParamRes = await request(app)
         .get("/api/tickets?priority=INVALID_PRIORITY&status=INVALID_STATUS")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(invalidParamRes.status).toBe(200);
       expect(Array.isArray(invalidParamRes.body.data)).toBe(true);
@@ -193,7 +214,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("paginates data correctly with valid page and pageSize (10, 25, 50)", async () => {
       const pageRes = await request(app)
         .get("/api/tickets?page=1&pageSize=25")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(pageRes.status).toBe(200);
       expect(pageRes.body.pagination.page).toBe(1);
@@ -203,7 +224,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("falls back silently to safe defaults (createdAt / desc / 10 / 1) for invalid sort or pagination params", async () => {
       const fallbackRes = await request(app)
         .get("/api/tickets?sortBy=invalidField&sortDir=invalidDir&page=-5&pageSize=100")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(fallbackRes.status).toBe(200);
       expect(fallbackRes.body.pagination.page).toBe(1);
@@ -213,7 +234,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("orders data by createdAt DESC by default with ticketNumber DESC secondary tie-breaker (BR-08, BR-17)", async () => {
       const res = await request(app)
         .get("/api/tickets?sortBy=createdAt&sortDir=desc")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(res.status).toBe(200);
       const data = res.body.data;
@@ -235,7 +256,7 @@ describe("GET /api/tickets API Integration Tests", () => {
     it("includes relation objects (category, relatedSystem) in ticket data items", async () => {
       const res = await request(app)
         .get("/api/tickets")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(res.status).toBe(200);
       if (res.body.data.length > 0) {
@@ -251,3 +272,4 @@ describe("GET /api/tickets API Integration Tests", () => {
     });
   });
 });
+

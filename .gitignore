@@ -16,3 +16,7 @@ server/uploads/
 # playwright test results
 test-results/
 playwright-report/
+
+# vite timestamps
+vite.config.ts.timestamp-*
+*.timestamp-*.mjs

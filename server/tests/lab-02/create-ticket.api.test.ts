@@ -1,8 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 
+async function getAuthCookie(email = "req.active1@toktickit.local", password = "Password123!"): Promise<string> {
+  const loginRes = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password });
+  return loginRes.headers["set-cookie"][0];
+}
+
 describe("POST /api/tickets API Integration Tests", () => {
+  let cookie: string;
+
+  beforeEach(async () => {
+    cookie = await getAuthCookie("req.active1@toktickit.local");
+  });
+
   describe("API-01: Create ticket with valid data (BR-01, BR-02, AC-01)", () => {
     it("creates a ticket and returns 201 Created with status NEW and formatted ticketNumber", async () => {
       const payload = {
@@ -15,13 +28,13 @@ describe("POST /api/tickets API Integration Tests", () => {
 
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookie])
         .send(payload);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty("id");
       expect(res.body.ticketNumber).toMatch(/^TKT-\d{4}-\d{6}$/);
-      expect(res.body.requesterId).toBe(1);
+      expect(Number(res.body.requesterId)).toBe(1);
       expect(res.body.categoryId).toBe(2);
       expect(res.body.relatedSystemId).toBe(7);
       expect(res.body.summary).toBe(payload.summary);
@@ -46,7 +59,7 @@ describe("POST /api/tickets API Integration Tests", () => {
 
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookie])
         .send({
           ...payload,
           summary: "Abc", // 3 chars < 5
@@ -67,7 +80,7 @@ describe("POST /api/tickets API Integration Tests", () => {
     it("returns 400 Bad Request with field error when categoryId or relatedSystemId is non-existent or inactive", async () => {
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookie])
         .send({
           categoryId: 999999, // non-existent
           relatedSystemId: 999999, // non-existent
@@ -88,8 +101,8 @@ describe("POST /api/tickets API Integration Tests", () => {
     });
   });
 
-  describe("API-03a: Missing or invalid x-requester-id header (BR-04, BR-13)", () => {
-    it("returns 400 Bad Request when x-requester-id header is missing", async () => {
+  describe("API-03a: Missing or invalid authentication (BR-04, BR-13)", () => {
+    it("returns 401 Unauthorized when session cookie is missing", async () => {
       const res = await request(app)
         .post("/api/tickets")
         .send({
@@ -100,15 +113,14 @@ describe("POST /api/tickets API Integration Tests", () => {
           requestedPriority: "MEDIUM",
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.statusCode).toBe(400);
-      expect(res.body.error).toBe("Bad Request");
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
     });
 
-    it("returns 400 Bad Request when x-requester-id header is not a valid integer", async () => {
+    it("returns 401 Unauthorized when session cookie is invalid", async () => {
       const res = await request(app)
         .post("/api/tickets")
-        .set("x-requester-id", "not-an-int")
+        .set("Cookie", ["toktickit_session=invalid_token_123"])
         .send({
           categoryId: 2,
           relatedSystemId: 7,
@@ -117,45 +129,35 @@ describe("POST /api/tickets API Integration Tests", () => {
           requestedPriority: "MEDIUM",
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.statusCode).toBe(400);
-      expect(res.body.error).toBe("Bad Request");
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
     });
   });
 
-  describe("API-03b: Inactive or non-existent requester ID (BR-05)", () => {
-    it("returns 403 Forbidden when requester ID is inactive (requester 5)", async () => {
+  describe("API-03b: Inactive or non-existent requester credentials (BR-05)", () => {
+    it("returns 401 Unauthorized when attempting to authenticate with inactive requester account", async () => {
       const res = await request(app)
-        .post("/api/tickets")
-        .set("x-requester-id", "5") // Seeded inactive user
+        .post("/api/auth/login")
         .send({
-          categoryId: 2,
-          relatedSystemId: 7,
-          summary: "Laptop battery drains quickly",
-          description: "My laptop battery is draining much faster than usual even when idle.",
-          requestedPriority: "MEDIUM",
+          email: "req.inactive@toktickit.local",
+          password: "Password123!",
         });
 
-      expect(res.status).toBe(403);
-      expect(res.body.statusCode).toBe(403);
-      expect(res.body.error).toBe("Forbidden");
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
     });
 
-    it("returns 403 Forbidden when requester ID does not exist in DB", async () => {
+    it("returns 401 Unauthorized when user account does not exist in DB", async () => {
       const res = await request(app)
-        .post("/api/tickets")
-        .set("x-requester-id", "999999")
+        .post("/api/auth/login")
         .send({
-          categoryId: 2,
-          relatedSystemId: 7,
-          summary: "Laptop battery drains quickly",
-          description: "My laptop battery is draining much faster than usual even when idle.",
-          requestedPriority: "MEDIUM",
+          email: "nonexistent@toktickit.local",
+          password: "Password123!",
         });
 
-      expect(res.status).toBe(403);
-      expect(res.body.statusCode).toBe(403);
-      expect(res.body.error).toBe("Forbidden");
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
     });
   });
 });
+

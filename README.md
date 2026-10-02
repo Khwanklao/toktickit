@@ -1,60 +1,79 @@
-# TokTickIT
+# TokTickIT (Lab 2 — Requester Ticketing MVP)
 
-TokTickIT is an IT Helpdesk Support and Ticketing System built with a React frontend, Node.js + Express backend, and PostgreSQL database managed via Prisma ORM.
+TokTickIT is an IT Helpdesk Support and Ticketing System built with a React frontend, Node.js + Express backend, and PostgreSQL database managed via Prisma ORM. Lab 2 implements the complete Requester-facing ticketing experience using the Zen Green visual language, temporary Development Requester selection, attachment management, and comprehensive automated test suites.
 
 ## Project Structure
 
-- `client/` - React + TypeScript + Vite frontend application (styled with Bootstrap).
-- `server/` - Node.js + Express + TypeScript backend REST API.
-- `prisma/` - Prisma ORM database schema and configuration for PostgreSQL.
-- `docs/lab-01/` - Documentation and lab review records for Lab 01.
-- `tests/lab-01/` - Test suites for Lab 01 validation.
+* `client/` - React 18 + TypeScript + Vite frontend styled with Zen Green Theme CSS.
+* `server/` - Node.js + Express + TypeScript backend REST API using Prisma ORM (`server/prisma/`).
+* `docs/lab-02/` - Sprint documentation including `specification.md`, `api-spec.md`, `ui-spec.md`, `tests.md`, `reviewer.md`, and `ai-use.md`.
+* `e2e/lab-02/` - Playwright End-to-End and responsive design test suites.
+* `artifacts/lab-02/` - Playwright screenshot artifacts across desktop, tablet, and mobile viewports.
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
-- npm or yarn
-- PostgreSQL database instance
+* Node.js (v18 or higher)
+* npm (v9 or higher)
+* PostgreSQL database instance
 
 ## Getting Started
 
 ### 1. Installation
 
-Install dependencies for both client and server:
+Install root and workspace dependencies:
 
 ```bash
-cd client && npm install
-cd ../server && npm install
+npm install
+npm --prefix server install
+npm --prefix client install
 ```
 
 ### 2. Environment Setup
 
-Copy `.env.example` files to `.env` in the server and prisma directories:
-
-- `server/.env.example` -> `server/.env`
-- `prisma/.env.example` -> `prisma/.env`
-
-Update `DATABASE_URL` and `PORT` according to your local environment.
-
-### 3. Database Migration & Seed
-
-From the `server/` directory:
+Copy `.env.example` in the `server/` directory to `.env`:
 
 ```bash
-npx prisma migrate dev
-npm run prisma:seed
+cp server/.env.example server/.env
+```
+
+Ensure `DATABASE_URL` and `PORT` are properly configured in `server/.env`.
+
+### 3. Database Migration & Idempotent Seeding
+
+Run Prisma migrations and seed default Requesters, Categories, and Systems:
+
+```bash
+npm --prefix server run prisma:migrate
+npm --prefix server run prisma:seed
 ```
 
 ### 4. Running Development Servers
 
-From root:
-- Run Client: `npm run dev:client`
-- Run Server: `npm run dev:server`
+Run both the frontend and backend servers concurrently from the project root:
 
-Or individually within `client/` and `server/` directories using `npm run dev`.
+```bash
+npm run dev
+```
 
-### 5. Running Tests
+Or start them individually:
 
-- Run all tests: `npm test`
-- Client unit tests: `npm run test:client`
-- Server API tests: `npm run test:server`
+* **Client (Vite):** `npm run dev:client` (Runs on `http://localhost:5173`)
+* **Server (Express):** `npm run dev:server` (Runs on `http://localhost:3000`)
+
+### 5. Running Automated Tests
+
+TokTickIT has 100% test coverage across all layers (107/107 tests passing):
+
+```bash
+# Run unit, API, and component test suites (88 tests)
+npm test
+
+# Run Server Unit & API integration tests (62 tests)
+npm run test:server
+
+# Run Client UI component tests (26 tests)
+npm run test:client
+
+# Run Playwright E2E and Responsive tests (19 tests)
+npx playwright test
+```

@@ -1,16 +1,31 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import path from "path";
 import fs from "fs";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 
+async function getAuthCookie(email = "req.active1@toktickit.local", password = "Password123!"): Promise<string> {
+  const loginRes = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password });
+  return loginRes.headers["set-cookie"][0];
+}
+
 describe("Attachment Management APIs Integration Tests", () => {
+  let cookieReq1: string;
+  let cookieReq2: string;
+
+  beforeEach(async () => {
+    cookieReq1 = await getAuthCookie("req.active1@toktickit.local");
+    cookieReq2 = await getAuthCookie("req.active2@toktickit.local");
+  });
+
   // Helper to create a ticket for testing
-  async function createTestTicket(requesterId: number = 1, summary: string = "Attachment Test Ticket") {
+  async function createTestTicket(cookie: string = cookieReq1, summary: string = "Attachment Test Ticket") {
     const res = await request(app)
       .post("/api/tickets")
-      .set("x-requester-id", String(requesterId))
+      .set("Cookie", [cookie])
       .send({
         categoryId: 1,
         relatedSystemId: 1,
@@ -24,11 +39,11 @@ describe("Attachment Management APIs Integration Tests", () => {
 
   describe("API-09 & API-10: File Upload (POST /api/tickets/:id/attachments)", () => {
     it("successfully uploads a valid attachment (PNG) and returns 201 Created with public metadata", async () => {
-      const ticketId = await createTestTicket(1, "PNG Upload Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "PNG Upload Test Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("fake-png-content"), "screenshot.png");
 
       expect(uploadRes.status).toBe(201);
@@ -45,11 +60,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("successfully uploads a valid PDF attachment", async () => {
-      const ticketId = await createTestTicket(1, "PDF Upload Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "PDF Upload Test Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("%PDF-1.4 fake content"), "report.pdf");
 
       expect(uploadRes.status).toBe(201);
@@ -58,11 +73,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("rejects invalid MIME types (e.g. text/plain, zip) with 400 Bad Request", async () => {
-      const ticketId = await createTestTicket(1, "Invalid MIME Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Invalid MIME Test Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("plain text content"), "info.txt");
 
       expect(uploadRes.status).toBe(400);
@@ -72,11 +87,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("rejects empty files (0 bytes) with 400 Bad Request", async () => {
-      const ticketId = await createTestTicket(1, "Empty File Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Empty File Test Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from(""), "empty.png");
 
       expect(uploadRes.status).toBe(400);
@@ -86,12 +101,12 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("rejects oversized files (>5MB) with 400 Bad Request", async () => {
-      const ticketId = await createTestTicket(1, "Oversized File Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Oversized File Test Ticket");
       const largeBuffer = Buffer.alloc(5 * 1024 * 1024 + 100); // > 5MB
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", largeBuffer, "large.png");
 
       expect(uploadRes.status).toBe(400);
@@ -101,13 +116,13 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("API-10: returns 409 Conflict when attempting to upload 6th active attachment", async () => {
-      const ticketId = await createTestTicket(1, "5 Attachment Limit Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "5 Attachment Limit Ticket");
 
       // Upload 5 valid attachments
       for (let i = 1; i <= 5; i++) {
         const res = await request(app)
           .post(`/api/tickets/${ticketId}/attachments`)
-          .set("x-requester-id", "1")
+          .set("Cookie", [cookieReq1])
           .attach("file", Buffer.from(`file-${i}`), `doc${i}.pdf`);
         expect(res.status).toBe(201);
       }
@@ -115,7 +130,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // 6th upload attempt
       const sixthRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("file-6"), "doc6.pdf");
 
       expect(sixthRes.status).toBe(409);
@@ -135,7 +150,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Non-existent ticket
       const notFoundRes = await request(app)
         .post("/api/tickets/999999/attachments")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("test"), "test.png");
       expect(notFoundRes.status).toBe(404);
       expect(notFoundRes.body.error).toBe("Not Found");
@@ -143,15 +158,15 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Malformed ticket ID
       const malformedRes = await request(app)
         .post("/api/tickets/abc/attachments")
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("test"), "test.png");
       expect(malformedRes.status).toBe(404);
 
       // Unowned ticket (created by Requester 1, accessed by Requester 2)
-      const ticketId = await createTestTicket(1, "Requester 1 Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Requester 1 Ticket");
       const unownedRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "2")
+        .set("Cookie", [cookieReq2])
         .attach("file", Buffer.from("test"), "test.png");
       expect(unownedRes.status).toBe(404);
     });
@@ -159,18 +174,18 @@ describe("Attachment Management APIs Integration Tests", () => {
 
   describe("API-11b: Metadata Fetch (GET /api/attachments/:id)", () => {
     it("returns 200 OK with metadata for active attachment", async () => {
-      const ticketId = await createTestTicket(1, "Metadata Fetch Active Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Metadata Fetch Active Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("content"), "metadata_test.png");
 
       const attachmentId = uploadRes.body.id;
 
       const metaRes = await request(app)
         .get(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(metaRes.status).toBe(200);
       expect(metaRes.body.id).toBe(attachmentId);
@@ -183,11 +198,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("returns 200 OK with metadata for soft-removed attachment (BR-21, API-11b)", async () => {
-      const ticketId = await createTestTicket(1, "Metadata Fetch Removed Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Metadata Fetch Removed Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("content"), "to_be_removed.png");
 
       const attachmentId = uploadRes.body.id;
@@ -195,13 +210,13 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Soft remove
       await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({ reason: "No longer needed for audit" });
 
       // Fetch metadata
       const metaRes = await request(app)
         .get(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(metaRes.status).toBe(200);
       expect(metaRes.body.id).toBe(attachmentId);
@@ -214,11 +229,11 @@ describe("Attachment Management APIs Integration Tests", () => {
 
   describe("API-11, API-12 & API-15: Soft-Remove (DELETE /api/attachments/:id)", () => {
     it("API-11: soft-removes attachment with valid reason and subsequent download returns 410 Gone", async () => {
-      const ticketId = await createTestTicket(1, "Soft Remove Test Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Soft Remove Test Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("binary-data"), "remove_me.pdf");
 
       const attachmentId = uploadRes.body.id;
@@ -226,19 +241,19 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Soft remove
       const deleteRes = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({ reason: "Uploaded incorrect document" });
 
       expect(deleteRes.status).toBe(200);
       expect(deleteRes.body.isRemoved).toBe(true);
-      expect(deleteRes.body.removedBy).toBe(1);
+      expect(Number(deleteRes.body.removedBy)).toBe(1);
       expect(deleteRes.body.removalReason).toBe("Uploaded incorrect document");
       expect(deleteRes.body.removedAt).toBeDefined();
 
       // Subsequent download returns 410 Gone
       const downloadRes = await request(app)
         .get(`/api/attachments/${attachmentId}/download`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(downloadRes.status).toBe(410);
       expect(downloadRes.body.statusCode).toBe(410);
@@ -246,11 +261,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("API-12: rejects soft-remove when reason is missing or empty/whitespace-only", async () => {
-      const ticketId = await createTestTicket(1, "Soft Remove Missing Reason Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Soft Remove Missing Reason Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("binary-data"), "keep_me.pdf");
 
       const attachmentId = uploadRes.body.id;
@@ -258,7 +273,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Missing reason body
       const missingReasonRes = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({});
 
       expect(missingReasonRes.status).toBe(400);
@@ -267,7 +282,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Whitespace only reason
       const emptyReasonRes = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({ reason: "   " });
 
       expect(emptyReasonRes.status).toBe(400);
@@ -279,11 +294,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("API-15: repeat DELETE on an already soft-removed file returns 409 Conflict without overwriting original removal details", async () => {
-      const ticketId = await createTestTicket(1, "Repeat Delete Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Repeat Delete Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("data"), "double_delete.png");
 
       const attachmentId = uploadRes.body.id;
@@ -291,7 +306,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // First delete
       const firstDelete = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({ reason: "First removal reason" });
 
       expect(firstDelete.status).toBe(200);
@@ -300,7 +315,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Second delete attempt
       const secondDelete = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .send({ reason: "Second removal reason attempt" });
 
       expect(secondDelete.status).toBe(409);
@@ -317,19 +332,19 @@ describe("Attachment Management APIs Integration Tests", () => {
 
   describe("API-16 & API-08b: Download Endpoint & Ownership Isolation", () => {
     it("successfully downloads active attachment file with correct content type & disposition", async () => {
-      const ticketId = await createTestTicket(1, "Download Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Download Ticket");
       const fileContent = "Downloadable attachment content";
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from(fileContent), "download_test.png");
 
       const attachmentId = uploadRes.body.id;
 
       const downloadRes = await request(app)
         .get(`/api/attachments/${attachmentId}/download`)
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(downloadRes.status).toBe(200);
       expect(downloadRes.headers["content-type"]).toContain("image/png");
@@ -338,11 +353,11 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
 
     it("API-08b: returns 404 Not Found when Requester 2 attempts to fetch metadata, download, or delete Requester 1's attachment", async () => {
-      const ticketId = await createTestTicket(1, "Requester 1 Private Attachment Ticket");
+      const ticketId = await createTestTicket(cookieReq1, "Requester 1 Private Attachment Ticket");
 
       const uploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("secret"), "secret.pdf");
 
       const attachmentId = uploadRes.body.id;
@@ -350,19 +365,19 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Requester 2 fetches metadata
       const metaRes = await request(app)
         .get(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "2");
+        .set("Cookie", [cookieReq2]);
       expect(metaRes.status).toBe(404);
 
       // Requester 2 attempts download
       const downloadRes = await request(app)
         .get(`/api/attachments/${attachmentId}/download`)
-        .set("x-requester-id", "2");
+        .set("Cookie", [cookieReq2]);
       expect(downloadRes.status).toBe(404);
 
       // Requester 2 attempts delete
       const deleteRes = await request(app)
         .delete(`/api/attachments/${attachmentId}`)
-        .set("x-requester-id", "2")
+        .set("Cookie", [cookieReq2])
         .send({ reason: "Unauthorized delete" });
       expect(deleteRes.status).toBe(404);
     });
@@ -370,7 +385,7 @@ describe("Attachment Management APIs Integration Tests", () => {
     it("API-16: download returns 404 Not Found for non-existent attachment ID", async () => {
       const downloadRes = await request(app)
         .get("/api/attachments/999999/download")
-        .set("x-requester-id", "1");
+        .set("Cookie", [cookieReq1]);
 
       expect(downloadRes.status).toBe(404);
       expect(downloadRes.body.error).toBe("Not Found");
@@ -381,12 +396,12 @@ describe("Attachment Management APIs Integration Tests", () => {
     it("preserves ticket when attachment upload fails, and retrying upload succeeds on existing ticket", async () => {
       const summaryText = `Preservation Ticket ${Date.now()}`;
       // Step 1: Create Ticket
-      const ticketId = await createTestTicket(1, summaryText);
+      const ticketId = await createTestTicket(cookieReq1, summaryText);
 
       // Step 2: Failed attachment upload attempt (e.g. invalid file type)
       const failedUploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("invalid data"), "script.exe"); // unsupported MIME
 
       expect(failedUploadRes.status).toBe(400);
@@ -400,7 +415,7 @@ describe("Attachment Management APIs Integration Tests", () => {
       // Step 4: Retry upload with valid file on the SAME ticket ID
       const retryUploadRes = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .set("x-requester-id", "1")
+        .set("Cookie", [cookieReq1])
         .attach("file", Buffer.from("valid content"), "valid_retry.pdf");
 
       expect(retryUploadRes.status).toBe(201);
@@ -414,3 +429,4 @@ describe("Attachment Management APIs Integration Tests", () => {
     });
   });
 });
+
