@@ -13,7 +13,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   setUser: (user: User | null) => void;
-  fetchUser: () => Promise<void>;
+  fetchUser: () => Promise<User | null>;
+  login: (credentials: { email: string; password: string }) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -23,15 +24,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUser = async () => {
+  const fetchUser = async (): Promise<User | null> => {
     try {
       const res = await apiClient.get<any>("/api/auth/me");
-      setUser(res.user || res);
+      const userData = res && "id" in res ? res : res?.user || null;
+      setUser(userData);
+      return userData;
     } catch (_) {
       setUser(null);
+      return null;
     } finally {
       setLoading(false);
     }
+  };
+
+  const login = async (credentials: { email: string; password: string }): Promise<User> => {
+    const res = await apiClient.post<any>("/api/auth/login", credentials);
+    const userData = res && "id" in res ? res : res?.user || null;
+    setUser(userData);
+    return userData;
   };
 
   const logout = async () => {
@@ -48,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, setUser, fetchUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, setUser, fetchUser, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -61,7 +72,8 @@ export const useAuth = () => {
       user: null,
       loading: false,
       setUser: () => {},
-      fetchUser: async () => {},
+      fetchUser: async () => null,
+      login: async () => { throw new Error("AuthProvider missing"); },
       logout: async () => {},
     };
   }

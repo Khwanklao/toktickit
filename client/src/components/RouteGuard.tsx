@@ -1,17 +1,20 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useRequester } from "../context/RequesterContext.js";
 import { useAuth } from "../context/AuthContext.js";
-import { getStoredRequesterId } from "../lib/apiClient.js";
+import { getRoleHomePath } from "./Login.js";
 
-export const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentRequester, status } = useRequester();
-  const { user, loading: authLoading } = useAuth();
+interface RouteGuardProps {
+  children: React.ReactNode;
+  allowedRoles?: ("REQUESTER" | "IT_STAFF" | "ADMINISTRATOR")[];
+}
+
+export const RouteGuard: React.FC<RouteGuardProps> = ({ children, allowedRoles }) => {
+  const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (authLoading) {
+  if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center py-5" data-testid="route-guard-loading">
+      <div className="min-vh-100 d-flex justify-content-center align-items-center py-5" data-testid="route-guard-loading">
         <div className="spinner-border text-success" role="status">
           <span className="visually-hidden">Loading session...</span>
         </div>
@@ -19,24 +22,16 @@ export const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }
     );
   }
 
-  // IT Staff and Administrators or staff routes do not require a requester selection
-  if (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR" || location.pathname.startsWith("/staff")) {
-    return <>{children}</>;
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  const storedId = getStoredRequesterId();
-  if (status === "loading" || (status === "idle" && storedId)) {
-    return (
-      <div className="d-flex justify-content-center align-items-center py-5" data-testid="route-guard-loading">
-        <div className="spinner-border text-success" role="status">
-          <span className="visually-hidden">Loading session...</span>
-        </div>
-      </div>
-    );
+  if (user.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
   }
 
-  if (!currentRequester) {
-    return <Navigate to="/select-requester" state={{ from: location }} replace />;
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={getRoleHomePath(user.role)} replace />;
   }
 
   return <>{children}</>;

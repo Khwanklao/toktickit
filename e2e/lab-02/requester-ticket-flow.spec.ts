@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Requester Ticket Flow E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/select-requester");
-    await page.waitForSelector('[data-testid="requester-select"]');
-    await page.selectOption('[data-testid="requester-select"]', "1");
-    await page.click('[data-testid="continue-button"]');
-    await page.waitForURL("**/tickets");
+    await page.request.post("http://localhost:3000/api/auth/login", {
+      data: { email: "req.active1@toktickit.local", password: "Password123!" },
+    });
+    await page.goto("/tickets");
+    await page.waitForSelector('[data-testid="my-tickets-screen"]');
   });
 
   test("E2E-01: End-to-end ticket creation to My Tickets verification (AC-01, FR-04)", async ({ page }) => {
@@ -66,8 +66,8 @@ test.describe("Requester Ticket Flow E2E Tests", () => {
     const ticketId = url.split("/tickets/")[1];
 
     // 2. Switch active requester context to Requester 2 (Michael Brown) in localStorage
-    await page.evaluate(() => {
-      localStorage.setItem("toktickit_requester_id", "2");
+    await page.request.post("http://localhost:3000/api/auth/login", {
+      data: { email: "req.active2@toktickit.local", password: "Password123!" },
     });
     await page.goto("/tickets");
     await page.waitForSelector('[data-testid="my-tickets-screen"]');

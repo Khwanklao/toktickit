@@ -193,6 +193,25 @@ authRouter.post("/change-password", authenticateUser, async (req: Request, res: 
 
     await revokeUserSessions(fullUser.id);
 
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await prisma.session.create({
+      data: {
+        userId: fullUser.id,
+        token,
+        expiresAt,
+      },
+    });
+
+    res.cookie("toktickit_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     return res.status(200).json({
       id: updatedUser.id,
       name: updatedUser.name,

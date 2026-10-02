@@ -11,22 +11,23 @@ test.describe("Responsive Layout Visual and Functional Tests (RESP-01)", () => {
     test.describe(`${vp.name} Viewport (${vp.width}x${vp.height})`, () => {
       test.beforeEach(async ({ page }) => {
         await page.setViewportSize({ width: vp.width, height: vp.height });
-        await page.addInitScript(() => {
-          localStorage.setItem("toktickit_requester_id", "1");
+        await page.request.post("http://localhost:3000/api/auth/login", {
+          data: { email: "req.active1@toktickit.local", password: "Password123!" },
         });
       });
 
-      test(`Requester Selector responsive layout at ${vp.name}`, async ({ page }) => {
-        await page.goto("/select-requester");
-        await page.waitForSelector('[data-testid="requester-select"]');
+      test(`Login responsive layout at ${vp.name}`, async ({ page }) => {
+        await page.context().clearCookies();
+        await page.goto("/login");
+        await page.waitForSelector('#email');
 
         const isOverflowing = await page.evaluate(
           () => document.documentElement.scrollWidth > window.innerWidth
         );
         expect(isOverflowing).toBe(false);
 
-        const continueBtn = page.locator('[data-testid="continue-button"]');
-        await expect(continueBtn).toBeVisible();
+        const submitBtn = page.locator('[data-testid="login-submit-button"]');
+        await expect(submitBtn).toBeVisible();
       });
 
       test(`My Tickets responsive layout at ${vp.name}`, async ({ page }) => {

@@ -7,6 +7,7 @@ import * as api from "../../src/api.js";
 describe("App", () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.pushState({}, "Home", "/");
     vi.restoreAllMocks();
 
     vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
@@ -36,6 +37,7 @@ describe("App", () => {
   });
 
   it("shows Online and the seeded categories on success", async () => {
+    window.history.pushState({}, "Check System", "/check-system");
     const mockCategories = [
       { id: 1, name: "Account and Access" },
       { id: 2, name: "Hardware" },
@@ -59,6 +61,7 @@ describe("App", () => {
   });
 
   it("shows an Offline error message when the API is unavailable", async () => {
+    window.history.pushState({}, "Check System", "/check-system");
     vi.spyOn(api, "checkSystem").mockRejectedValue(
       new Error("Unable to connect to TokTickIT API")
     );
@@ -71,4 +74,3 @@ describe("App", () => {
     expect(screen.getByText(/Unable to connect to TokTickIT API/i)).toBeInTheDocument();
   });
 });
-
