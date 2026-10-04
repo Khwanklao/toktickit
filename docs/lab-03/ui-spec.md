@@ -267,8 +267,15 @@ When the screen is narrower than 768px, tables automatically transform their dis
 ---
 
 ## 6. Visual Consistency & Accessibility Checklist
+
 To comply with the Part 9 evaluation criteria of the Lab 3 worksheet:
-* [x] **Focus Indicators:** Elements that receive focus (buttons, forms) must display a clearly visible light green outline (`#1B4D3E` or ring `#A7F3D0`) — not the browser's default blue outline
-* [x] **Text Contrast:** The contrast ratio of all text colors (including badges) must meet the WCAG AA minimum of 4.5:1
-* [x] **No Horizontal Overflow:** There must be no unwanted horizontal scrollbar at the page/body level, across every viewport size from 360px and up
-* [x] **Safe Clippings & Layout Wraps:** Exceptionally long text (e.g., ticket titles, emails) must be truncated appropriately (`truncate` or `break-words`) without overflowing the card box or breaking the table layout
+
+- [x] **Design Consistency**: Zen Green theme palette (#1B4D3E, #A7F3D0) is uniformly applied across all views, headers, buttons, and badges with cohesive spacing.
+- [x] **Role Navigation**: Navigation bar dynamically adapts based on role; Admin-only links (e.g., User Management, Ticket Queue Audit) are completely hidden from non-admin roles.
+- [x] **Badges**: Status and Role badges feature strong contrast ratios (meeting WCAG AA minimum 4.5:1) for optimal legibility.
+- [x] **Editable / Read-only Fields**: Read-only or locked controls (such as self-deactivation toggles) are visually disabled and clearly distinguished from editable inputs.
+- [x] **Validation Placement**: Validation error messages appear directly below the relevant input fields in clear red text.
+- [x] **Focus Indicators**: Focused elements (buttons, inputs) display a visible outline (#1B4D3E / #A7F3D0 ring) instead of relying solely on default browser outlines.
+- [x] **Clipping Prevention**: Long text strings (titles, emails) wrap safely (`break-words` / `truncate`) without clipping or breaking the container boundaries.
+- [x] **No Overlap**: Modals, banners, and layout containers maintain appropriate z-index and spacing without overlapping interactive elements across responsive views.
+- [x] **No Horizontal Overflow**: Viewport widths from 360px upwards render cleanly without unwanted horizontal scrollbars at the body/page level.

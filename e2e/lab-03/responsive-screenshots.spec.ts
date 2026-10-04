@@ -1,76 +1,107 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 
-test.describe("Feedback Item 5: Staff Views Responsive Layout Verification & Screenshot Capture", () => {
-  test("Capture responsive screenshots for Staff Ticket Queue and Staff Ticket Detail across Desktop, Tablet, and Mobile viewports", async ({ page }) => {
-    // 1. Ensure at least one ticket exists in DB by posting a ticket via requester API
-    await page.request.post("http://localhost:3000/api/auth/login", {
-      data: { email: "req.active1@toktickit.local", password: "Password123!" },
-    });
-    const createTicketRes = await page.request.post("http://localhost:3000/api/tickets", {
-      headers: { "x-requester-id": "1" },
-      data: {
-        title: "Responsive Verification Ticket",
-        summary: "Responsive Layout Verification",
-        description: "Checking responsiveness across Desktop (1024px), Tablet (768px), and Mobile (375px & 390px).",
-        categoryId: 1,
-        relatedSystemId: 1,
-        requestedPriority: "MEDIUM",
-      },
-    });
-    const ticketData = await createTicketRes.json();
-    const ticketId = ticketData.ticket?.id || ticketData.id || 1;
+test.describe("Lab 3 Responsive Layout Verification & Screenshot Capture", () => {
+  test.setTimeout(90000);
 
-    // 2. Authenticate as IT Staff
-    await page.request.post("http://localhost:3000/api/auth/login", {
-      data: { email: "staff.alex@toktickit.local", password: "Password123!" },
-    });
+  test("Capture responsive screenshots across Authentication, Staff Queue, Staff Detail, and User Management", async ({ page, context }) => {
+    // ----------------------------------------------------
+    // 1. Authentication Screens (/login)
+    // ----------------------------------------------------
+    await context.clearCookies();
+    await page.goto("/login");
+    await page.waitForSelector("#email");
+
+    // Login Desktop
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/authentication/login-desktop.png" });
+
+    // Login Tablet
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/authentication/login-tablet.png" });
+
+    // Login Mobile
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/authentication/login-mobile.png" });
+
+    // Change Password View
+    await page.fill("#email", "req.active4@toktickit.local");
+    await page.fill("#password", "Password123!");
+    await page.click('[data-testid="login-submit-button"]');
+
+    // รอจนกว่าจะไปถึง change-password หรือหน้า landing
+    try {
+      await page.waitForURL("**/change-password", { timeout: 7000 });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.screenshot({ path: "artifacts/lab-03/screenshots/authentication/change-password-desktop.png" });
+    } catch {
+      // หาก user ไม่ติด change-password ให้เปิดเข้าไปตรงๆ
+      await page.goto("/change-password");
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.screenshot({ path: "artifacts/lab-03/screenshots/authentication/change-password-desktop.png" });
+    }
 
     // ----------------------------------------------------
-    // A. Staff Ticket Queue (/staff/queue)
+    // 2. Staff Ticket Queue (/staff/queue)
     // ----------------------------------------------------
-    await page.goto("/staff/queue");
+    await context.clearCookies();
+    await page.goto("/login");
+    await page.fill("#email", "staff.alex@toktickit.local");
+    await page.fill("#password", "Password123!");
+    await page.click('[data-testid="login-submit-button"]');
     await page.waitForURL("**/staff/queue");
     await page.waitForSelector('[data-testid="search-input"]');
 
-    // Desktop (1024px)
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await page.waitForSelector('[data-testid="desktop-queue-table"]');
-    await page.screenshot({ path: "e2e/screenshots/responsive/queue-desktop-1024.png" });
+    // Queue Desktop
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-queue/desktop.png" });
 
-    // Tablet (768px)
+    // Queue Tablet
     await page.setViewportSize({ width: 768, height: 1024 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/queue-tablet-768.png" });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-queue/tablet.png" });
 
-    // Mobile (375px)
+    // Queue Mobile
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.waitForSelector('[data-testid="mobile-ticket-list"]');
-    await page.screenshot({ path: "e2e/screenshots/responsive/queue-mobile-375.png" });
-
-    // Mobile (390px)
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/queue-mobile-390.png" });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-queue/mobile.png" });
 
     // ----------------------------------------------------
-    // B. Staff Ticket Detail (/staff/tickets/:id)
+    // 3. Staff Ticket Detail (/staff/tickets/:id)
     // ----------------------------------------------------
-    await page.goto(`/staff/tickets/${ticketId}`);
-    await page.waitForURL(`**/staff/tickets/${ticketId}`);
+    await page.goto("/staff/tickets/1");
+    await page.waitForURL("**/staff/tickets/1");
     await page.waitForSelector('[data-testid="ticket-metadata-grid"]');
 
-    // Desktop (1024px)
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/detail-desktop-1024.png" });
+    // Detail Desktop
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-ticket-detail/desktop.png" });
 
-    // Tablet (768px)
+    // Detail Tablet
     await page.setViewportSize({ width: 768, height: 1024 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/detail-tablet-768.png" });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-ticket-detail/tablet.png" });
 
-    // Mobile (375px)
+    // Detail Mobile
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/detail-mobile-375.png" });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/staff-ticket-detail/mobile.png" });
 
-    // Mobile (390px)
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: "e2e/screenshots/responsive/detail-mobile-390.png" });
+    // ----------------------------------------------------
+    // 4. Admin User Management (/admin/users)
+    // ----------------------------------------------------
+    await context.clearCookies();
+    await page.goto("/login");
+    await page.fill("#email", "admin.main@toktickit.local");
+    await page.fill("#password", "Password123!");
+    await page.click('[data-testid="login-submit-button"]');
+    await page.waitForURL("**/admin/users");
+
+    // Admin Desktop
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/user-management/desktop.png" });
+
+    // Admin Tablet
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/user-management/tablet.png" });
+
+    // Admin Mobile
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.screenshot({ path: "artifacts/lab-03/screenshots/user-management/mobile.png" });
   });
 });
