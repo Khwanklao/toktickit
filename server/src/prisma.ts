@@ -1,5 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 
+declare module "@prisma/client" {
+  interface PrismaClient {
+    requesterUser: any;
+  }
+}
+
 // Lazy singleton: the client is created on first use, not at import time.
 let client: PrismaClient | null = null;
 
