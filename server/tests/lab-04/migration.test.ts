@@ -5,6 +5,9 @@ import path from "path";
 
 const TEST_DB_URL = "postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public";
 
+// Ensure DATABASE_URL is directed to the isolated test database for this suite
+process.env.DATABASE_URL = TEST_DB_URL;
+
 describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () => {
   let prisma: PrismaClient;
 
@@ -13,10 +16,35 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
     ALTER TABLE "Ticket" DROP COLUMN IF EXISTS "reopenedAt";
   `;
 
-  const migrationFilePath = path.resolve(
-    "prisma/migrations/20261025024500_add_action_taken_and_reopened_at/migration.sql"
+  // Dynamically discover the migration folder name from server/prisma/migrations/
+  const migrationsDir = path.resolve(process.cwd(), "prisma/migrations");
+  const migrationEntries = fs.readdirSync(migrationsDir, { withFileTypes: true });
+  const targetDirEntry = migrationEntries.find(
+    (entry) => entry.isDirectory() && entry.name.includes("add_action_taken_and_reopened_at")
   );
+
+  if (!targetDirEntry) {
+    throw new Error(
+      "Could not find migration directory matching 'add_action_taken_and_reopened_at' under prisma/migrations"
+    );
+  }
+
+  const migrationName = targetDirEntry.name;
+  const migrationFilePath = path.join(migrationsDir, migrationName, "migration.sql");
   const forwardMigrationSql = fs.readFileSync(migrationFilePath, "utf8");
+
+  interface PrismaMigrationRow {
+    id: string;
+    checksum: string;
+    finished_at: Date | string | null;
+    migration_name: string;
+    logs: string | null;
+    rolled_back_at: Date | string | null;
+    started_at: Date | string | null;
+    applied_steps_count: number;
+  }
+
+  let savedMigrationRow: PrismaMigrationRow | null = null;
 
   async function executeMultiStatementSql(sql: string) {
     const statements = sql
@@ -36,9 +64,25 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
   let legacyTicketId: number;
 
   beforeAll(async () => {
+    // 5. Safety guard: assert that DATABASE_URL points to toktickit_test and abort before any destructive statement
+    expect(process.env.DATABASE_URL).toContain("toktickit_test");
+    if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.includes("toktickit_test")) {
+      throw new Error(
+        `Safety guard aborted: DATABASE_URL must point to toktickit_test, got: ${process.env.DATABASE_URL}`
+      );
+    }
+
     prisma = new PrismaClient({
-      datasources: { db: { url: TEST_DB_URL } },
+      datasources: { db: { url: process.env.DATABASE_URL } },
     });
+
+    // Capture real migration row before any rollback or schema alterations
+    const initialRows = await prisma.$queryRawUnsafe<PrismaMigrationRow[]>(
+      `SELECT * FROM "_prisma_migrations" WHERE "migration_name" = '${migrationName}';`
+    );
+    if (initialRows.length > 0) {
+      savedMigrationRow = initialRows[0];
+    }
 
     // 1. Roll back ActionTaken and reopenedAt column to simulate pre-migration Lab 3 state
     await executeMultiStatementSql(rollbackSql);
@@ -107,18 +151,34 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
   });
 
   afterAll(async () => {
-    // Ensure final state on toktickit_test has migration applied for future test runs
+    // Restore schema objects and preserved migration row to leave toktickit_test in valid state
     try {
-      await executeMultiStatementSql(forwardMigrationSql);
-      await prisma.$executeRawUnsafe(`
-        INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
-        VALUES ('mig-reg01-issue2', 'checksum-add-action-taken', NOW(), '20261025024500_add_action_taken_and_reopened_at', NULL, NULL, NOW(), 1)
-        ON CONFLICT (id) DO UPDATE SET migration_name = '20261025024500_add_action_taken_and_reopened_at', finished_at = NOW(), rolled_back_at = NULL;
-      `);
-    } catch {
-      // ignore
+      if (prisma) {
+        await executeMultiStatementSql(forwardMigrationSql);
+
+        if (savedMigrationRow) {
+          // Any DELETE or UPDATE on _prisma_migrations must filter strictly by exact migration_name
+          await prisma.$executeRawUnsafe(
+            `DELETE FROM "_prisma_migrations" WHERE "migration_name" = '${migrationName}';`
+          );
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "_prisma_migrations" (
+              id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`,
+            savedMigrationRow.id,
+            savedMigrationRow.checksum,
+            savedMigrationRow.finished_at,
+            savedMigrationRow.migration_name,
+            savedMigrationRow.logs,
+            savedMigrationRow.rolled_back_at,
+            savedMigrationRow.started_at,
+            savedMigrationRow.applied_steps_count
+          );
+        }
+      }
+    } finally {
+      await prisma?.$disconnect();
     }
-    await prisma.$disconnect();
   });
 
   it("applies add_action_taken_and_reopened_at migration without data loss", async () => {
@@ -189,30 +249,27 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
   });
 
   it("executes the rollback procedure and verifies Lab 3 tables continue to operate normally", async () => {
-    // Ensure migration row is recorded before rollback
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
-      VALUES ('mig-reg01-issue2', 'checksum-add-action-taken', NOW(), '20261025024500_add_action_taken_and_reopened_at', NULL, NULL, NOW(), 1)
-      ON CONFLICT (id) DO UPDATE SET migration_name = '20261025024500_add_action_taken_and_reopened_at', finished_at = NOW(), rolled_back_at = NULL;
-    `);
-
-    // Verify row exists prior to rollback
-    const preRollbackCheck = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(`
-      SELECT migration_name FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';
-    `);
-    expect(preRollbackCheck.length).toBe(1);
+    // Before rollback step: read real row of migration and keep every column value
+    const preRollbackRows = await prisma.$queryRawUnsafe<PrismaMigrationRow[]>(
+      `SELECT * FROM "_prisma_migrations" WHERE "migration_name" = '${migrationName}';`
+    );
+    expect(preRollbackRows.length).toBe(1);
+    savedMigrationRow = preRollbackRows[0];
+    expect(savedMigrationRow.migration_name).toBe(migrationName);
+    expect(savedMigrationRow.checksum).toBeDefined();
 
     // Execute rollback SQL
     await executeMultiStatementSql(rollbackSql);
 
     // Execute documented history synchronization step per specification §7.3
+    // Any DELETE or UPDATE on _prisma_migrations must filter strictly by exact migration_name only
     await prisma.$executeRawUnsafe(
-      `DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';`
+      `DELETE FROM "_prisma_migrations" WHERE "migration_name" = '${migrationName}';`
     );
 
     // Concrete assertion: row must be absent from _prisma_migrations
     const postRollbackCheck = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(`
-      SELECT migration_name FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';
+      SELECT migration_name FROM "_prisma_migrations" WHERE "migration_name" = '${migrationName}';
     `);
     expect(postRollbackCheck.length).toBe(0);
 
