@@ -1,0 +1,54 @@
+# Sprint 4 Test Specification & Traceability Matrix: TokTickIT System
+
+## 1. Test Strategy & Overview
+This document defines the Test-Driven Development (TDD) test plan and Acceptance Test Matrix for Sprint 4, covering parent-child Actions Taken tracking, operational dashboards for Requesters and IT Staff, strict state transition governance with resolution verification gate, optimistic concurrency controls, idempotent database migration/seeding, and complete regression hardening.
+
+Testing spans the core quality dimensions:
+* **Unit Tests (Domain Logic):** Verify pure domain functions, boundary validation rules, transition matrix, metrics calculation, and query parsing without external dependencies.
+* **Database & Migration Tests:** Verify schema evolution safety, zero data loss on migration, rollback procedure viability, and seed idempotency on an isolated test database (`toktickit_test`).
+* **API / Integration Tests:** Verify REST endpoints, server-side RBAC, resolution gates, optimistic concurrency handling, and error response envelopes.
+* **UI Component & Responsive Tests:** Verify Dashboard metric cards, attention indicators, Actions Taken timeline, and modal workflows under the Zen Green design system.
+* **End-to-End (E2E) Regression:** Verify full browser user journeys with Playwright across Requester, IT Staff, and Administrator roles.
+
+---
+
+## 2. Full Traceability Matrix
+
+| Test ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final Status |
+|---|---|---|---|---|---|---|
+| UNIT-01 | Unit | AC-01, AC-02 (BR-03, BR-04) | Action input validation (`validateActionInput`) | Validates description & result (5-2,000 chars, no whitespace-only), followUpNote requirement, and attachmentNotes length (<= 500 chars) | `server/tests/lab-04/unit/action-validation.unit.test.ts` | Pass |
+| UNIT-02 | Unit | AC-06 (BR-05) | Action date boundaries (`validateActionDate`) | Enforces `actionDateTime >= ticket.createdAt` and future tolerance window `<= now + 60s`; rejects invalid dates with code `INVALID_ACTION_DATE` | `server/tests/lab-04/unit/action-date.unit.test.ts` | Pass |
+| UNIT-03 | Unit | AC-07, AC-08 (BR-12) | Resolution gate evaluation (`canResolve`) | Rejects resolution with 0 actions; allows pre-reopen actions if `reopenedAt` is null; strictly requires `createdAt > reopenedAt` when reopened | `server/tests/lab-04/unit/resolution-gate.unit.test.ts` | Pass |
+| UNIT-04 | Unit | AC-10, AC-11 (BR-16) | Concurrency detection (`isStale`) | Skips check when token omitted; compares epoch milliseconds; detects >= 1 ms timestamp mismatch; throws ValidationError on invalid date format | `server/tests/lab-04/unit/concurrency.unit.test.ts` | Pass |
+| UNIT-05 | Unit | BR-10 | State transition matrix (`canTransition`) | Tests all 64 status transition pairs; rejects same-status transitions; enforces terminal lock on CLOSED and CANCELLED states | `server/tests/lab-04/unit/transition-matrix.unit.test.ts` | Pass |
+| UNIT-06 | Unit | AC-15 (BR-14, Sec 5.3) | Staff dashboard metrics & attention flag | Calculates New, Open (OPEN + REOPENED), In Progress, Waiting for Requester, and My Assigned metrics; tests attention flag on WAITING_FOR_REQUESTER | `server/tests/lab-04/unit/dashboard-metrics.unit.test.ts` | Pass |
+| UNIT-07 | Unit | AC-14 (BR-13, Sec 5.3) | Requester dashboard metrics | Calculates Active Tickets (NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, REOPENED), In Progress, Resolved, and Closed metrics | `server/tests/lab-04/unit/dashboard-metrics.unit.test.ts` | Pass |
+| UNIT-08 | Unit | Sec 5.3 | Queue query filter parser (`parseQueueFilters`) | Parses status, group=open, ownerId (resolving 'me'), activeOnly=true; enforces exclusivity and throws ValidationError on invalid params | `server/tests/lab-04/unit/query-parser.unit.test.ts` | Pass |
+| REG-01 | DB Migration | AC-18 | Migration & rollback safety on `toktickit_test` | Applies migration onto Lab 3 dataset, asserts zero data loss, verifies legacy tickets have 0 actions and reopenedAt = null, and executes rollback SQL successfully | `server/tests/lab-04/migration.test.ts` | Pass |
+| REG-04 | DB Seed | Section 4, 7.3 | Idempotent seed data verification on `toktickit_test` | Seeds database twice, asserts identical counts, verifies all 8 statuses, assigned/unassigned, priority mix, post-reopen constraints, and timestamp rules (BR-05, BR-15) | `server/tests/lab-04/seed.test.ts` | Pass |
+| API-01 | API | AC-01 (FR-01, BR-15) | Create Action Taken (`POST /api/tickets/:id/actions`) | Creates Action Taken by Staff/Admin, populates performedById from session, touches ticket updatedAt, returns 201 Created | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-02 | API | AC-02 (FR-02) | Action follow-up note validation | Rejects creation/update with 400 VALIDATION_ERROR when followUpRequired is true but followUpNote is missing or < 5 chars | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-03 | API | AC-03 (FR-06) | Role restriction on Action creation/update | Rejects Requester attempting POST or PATCH on Actions Taken endpoints with HTTP 403 Forbidden | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-04 | API | AC-04 (FR-03) | Actions Taken retrieval permissions | Requester retrieves actions on owned ticket (200 OK); accessing another user's ticket returns 404 Not Found | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-05 | API | AC-05 (BR-06) | Terminal ticket write lock | Rejects creating or editing Actions Taken, or calling resolve-indication on CLOSED or CANCELLED tickets with 400 TICKET_TERMINAL | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-06 | API | AC-06 (BR-05) | Action datetime boundaries at API layer | Accepts actions within +60s clock drift; rejects actions preceding ticket creation or > 60s in future with 400 INVALID_ACTION_DATE | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-07 | API | AC-07 (BR-12) | Resolution gate enforcement on active tickets | Rejects transitioning status to RESOLVED when actions count is 0 with HTTP 400 RESOLUTION_ACTION_REQUIRED | `server/tests/lab-04/api/status.api.test.ts` | Pending |
+| API-08 | API | AC-08 (BR-12) | Resolution gate enforcement post-reopen | Rejects transitioning REOPENED ticket to RESOLVED unless at least one action has createdAt > ticket.reopenedAt | `server/tests/lab-04/api/status.api.test.ts` | Pending |
+| API-09 | API | AC-09 (BR-10) | State transition effects on REOPENED | Transition to REOPENED sets ticket.reopenedAt = now() and resets isRequesterResolved = false | `server/tests/lab-04/api/status.api.test.ts` | Pending |
+| API-10 | API | AC-10 (BR-16) | Concurrency control on Ticket status change | Returns HTTP 409 Conflict (STALE_UPDATE) when expectedUpdatedAt does not match stored updatedAt; succeeds when token omitted | `server/tests/lab-04/api/status.api.test.ts` | Pending |
+| API-11 | API | AC-11 (BR-16) | Concurrency control on Action Taken update | Returns HTTP 409 Conflict (STALE_UPDATE) when updating action with stale expectedUpdatedAt | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-12 | API | AC-12 | Action operation on non-existent ticket | Returns HTTP 404 Not Found when ticketId does not exist | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| API-13 | API | AC-13 (BR-09) | Administrator operational boundary | Admin can create/edit Actions Taken (201/200), but cannot modify ticket status, assign owner, or change priority (403 Forbidden) | `server/tests/lab-04/api/authorization.api.test.ts` | Pending |
+| API-14 | API | AC-14 (FR-07, BR-13) | Requester dashboard endpoint | Returns calculated metrics scoped to authenticated Requester; non-requesters receive HTTP 403 Forbidden | `server/tests/lab-04/api/dashboard.api.test.ts` | Pending |
+| API-15 | API | AC-15 (FR-08, BR-14) | IT Staff dashboard endpoint | Returns queue metrics and recent queue updates for Staff and Admin; Requesters receive HTTP 403 Forbidden | `server/tests/lab-04/api/dashboard.api.test.ts` | Pending |
+| API-16 | API | AC-20 (BR-07) | Rejection of physical DELETE on Actions Taken | Rejects DELETE /api/tickets/:id/actions/:actionId for all roles with HTTP 405 Method Not Allowed (METHOD_NOT_ALLOWED) | `server/tests/lab-04/api/actions.api.test.ts` | Pending |
+| UI-01 | Component | AC-02 | Actions Taken creation & follow-up note validation | Form displays validation banner and disables submit when followUpRequired is checked without valid followUpNote | `client/tests/lab-04/ActionTakenModal.test.tsx` | Pending |
+| UI-02 | Component | AC-14 | Requester dashboard metrics rendering & drill-down | Displays 4 metric cards, attention badges on WAITING_FOR_REQUESTER, and links to filtered /tickets views | `client/tests/lab-04/RequesterDashboard.test.tsx` | Pending |
+| UI-03 | Component | AC-15 | IT Staff dashboard metrics rendering & drill-down | Displays 5 metric cards, recent queue updates feed, and links to /staff/queue with correct query parameters | `client/tests/lab-04/StaffDashboard.test.tsx` | Pending |
+| UI-04 | Component | AC-16 | Dashboard zero-state rendering | Renders 0 counters and clean empty state banners without error or layout shifts | `client/tests/lab-04/DashboardZeroState.test.tsx` | Pending |
+| UI-05 | Component | AC-17 | Double-click protection & safe submission | Submit button disables immediately upon submission; retains form inputs upon recoverable error | `client/tests/lab-04/ActionTakenModal.test.tsx` | Pending |
+| UI-06 | Component | AC-21 | Optimistic concurrency conflict alert | Displays alert banner on HTTP 409 STALE_UPDATE with reload button to refresh latest data | `client/tests/lab-04/ConcurrencyAlert.test.tsx` | Pending |
+| E2E-01 | E2E | AC-01, AC-04 | Actions Taken lifecycle flow | Staff creates action, verifies timeline entry; Requester views action read-only on owned ticket | `e2e/lab-04/actions-taken.spec.ts` | Pending |
+| E2E-02 | E2E | AC-14 | Requester dashboard navigation & drill-down | Requester logs in, inspects dashboard metrics, clicks Active Tickets card, arrives at filtered queue | `e2e/lab-04/requester-dashboard.spec.ts` | Pending |
+| E2E-03 | E2E | AC-07, AC-08 | Resolution gate enforcement in browser | Staff attempts to resolve ticket with 0 actions (blocked), logs action, then successfully resolves ticket | `e2e/lab-04/resolution-gate.spec.ts` | Pending |
+| REG-02 | Regression | AC-19 | Full regression preservation (Labs 1 to 3) | Verifies all test suites from Lab 1, 2, and 3 continue to pass without breakage (Note: Pending due to pre-existing Lab 2 baseline failure in API-13 `requesters.api.test.ts` caused by User.id type change to UUID in Lab 3 commit 4f699e2; zero new regressions introduced in Sprint 4) | Full Automated Test Suite | Pending |

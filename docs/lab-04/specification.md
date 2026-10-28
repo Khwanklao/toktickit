@@ -216,6 +216,14 @@ DROP TABLE IF EXISTS "ActionTaken" CASCADE;
 ALTER TABLE "Ticket" DROP COLUMN IF EXISTS "reopenedAt";
 ```
 
+To bring Prisma's migration history tracking (`_prisma_migrations`) back in sync with the database schema after executing the rollback SQL, run:
+
+```sql
+DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';
+```
+
+*Note on Prisma synchronization:* Running `npx prisma migrate resolve --rolled-back` rejects applied migrations with error `P3012` because Prisma reserves the `--rolled-back` flag strictly for migrations in a failed state. Directly removing the migration row from `_prisma_migrations` is required so that Prisma recognizes the schema has reverted and allows future forward deployments (`prisma migrate deploy`) to reapply the migration cleanly without state drift.
+
 Then re-generate the Prisma Client to restore previous types.
 
 **Migration Testing & Seed Data**
