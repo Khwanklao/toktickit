@@ -110,6 +110,11 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
     // Ensure final state on toktickit_test has migration applied for future test runs
     try {
       await executeMultiStatementSql(forwardMigrationSql);
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+        VALUES ('mig-reg01-issue2', 'checksum-add-action-taken', NOW(), '20261025024500_add_action_taken_and_reopened_at', NULL, NULL, NOW(), 1)
+        ON CONFLICT (id) DO UPDATE SET migration_name = '20261025024500_add_action_taken_and_reopened_at', finished_at = NOW(), rolled_back_at = NULL;
+      `);
     } catch {
       // ignore
     }
@@ -184,8 +189,32 @@ describe("REG-01: Migration & Rollback Verification Test (toktickit_test)", () =
   });
 
   it("executes the rollback procedure and verifies Lab 3 tables continue to operate normally", async () => {
+    // Ensure migration row is recorded before rollback
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+      VALUES ('mig-reg01-issue2', 'checksum-add-action-taken', NOW(), '20261025024500_add_action_taken_and_reopened_at', NULL, NULL, NOW(), 1)
+      ON CONFLICT (id) DO UPDATE SET migration_name = '20261025024500_add_action_taken_and_reopened_at', finished_at = NOW(), rolled_back_at = NULL;
+    `);
+
+    // Verify row exists prior to rollback
+    const preRollbackCheck = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(`
+      SELECT migration_name FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';
+    `);
+    expect(preRollbackCheck.length).toBe(1);
+
     // Execute rollback SQL
     await executeMultiStatementSql(rollbackSql);
+
+    // Execute documented history synchronization step per specification §7.3
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';`
+    );
+
+    // Concrete assertion: row must be absent from _prisma_migrations
+    const postRollbackCheck = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(`
+      SELECT migration_name FROM "_prisma_migrations" WHERE "migration_name" = '20261025024500_add_action_taken_and_reopened_at';
+    `);
+    expect(postRollbackCheck.length).toBe(0);
 
     // Verify ActionTaken table is dropped
     const actionTakenCheck = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(`

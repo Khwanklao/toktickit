@@ -162,7 +162,7 @@ describe("REG-04: Idempotent Seed Verification Test (toktickit_test)", () => {
     expect(zeroTicketRequester?.role).toBe(Role.REQUESTER);
   });
 
-  it("verifies timestamp rules: ticket.updatedAt >= action.createdAt, actionDateTime >= ticket.createdAt, and none in the future", async () => {
+  it("verifies timestamp rules: ticket.updatedAt >= action.createdAt (BR-15), actionDateTime >= ticket.createdAt (BR-05), and none in the future (BR-05)", async () => {
     const ticketsWithActions = await testPrisma.ticket.findMany({
       where: { actionsTaken: { some: {} } },
       include: { actionsTaken: true },
