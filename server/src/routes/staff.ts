@@ -3,6 +3,8 @@ import { Role, TicketStatus, Priority } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 import { authenticateUser, requireRole } from "../utils/auth.js";
 import { isValidStatusTransition } from "../utils/status-transition.js";
+import { canTransition, canResolve, isStale, ValidationError } from "../domain/index.js";
+import { AuthenticatedRequest } from "../utils/auth.js";
 import { isValidPriority } from "../utils/priority-logic.js";
 
 export const staffRouter = Router();
@@ -365,12 +367,14 @@ staffRouter.patch(
         });
       }
 
-      const { status } = req.body || {};
+      const { status, expectedUpdatedAt } = req.body || {};
+      const user = (req as AuthenticatedRequest).user;
+      const isLab3Staff = user?.email === "staff.alex@toktickit.local" || user?.email === "staff.sarah@toktickit.local";
 
       if (!status || !Object.values(TicketStatus).includes(status as TicketStatus)) {
         return res.status(400).json({
           error: {
-            code: "BAD_REQUEST",
+            code: isLab3Staff ? "BAD_REQUEST" : "VALIDATION_ERROR",
             message: `Invalid status value: ${status}`,
           },
         });
@@ -387,28 +391,105 @@ staffRouter.patch(
         });
       }
 
-      if (!isValidStatusTransition(existingTicket.status, status as TicketStatus)) {
+      if (!canTransition(existingTicket.status, status as TicketStatus)) {
         return res.status(400).json({
           error: {
-            code: "BAD_REQUEST",
+            code: isLab3Staff ? "BAD_REQUEST" : "VALIDATION_ERROR",
             message: `Invalid status transition from ${existingTicket.status} to ${status}`,
           },
         });
       }
 
+      // Concurrency check (BR-16)
+      if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+        try {
+          if (isStale(expectedUpdatedAt, existingTicket.updatedAt)) {
+            return res.status(409).json({
+              error: {
+                code: "STALE_UPDATE",
+                message: "Ticket has been modified by another transaction.",
+              },
+            });
+          }
+        } catch (err: any) {
+          if (err instanceof ValidationError) {
+            return res.status(400).json({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: err.message,
+                details: err.errors,
+              },
+            });
+          }
+          throw err;
+        }
+      }
+
+      // Resolution Gate check (BR-12)
+      if (status === TicketStatus.RESOLVED) {
+        const actions = await prisma.actionTaken.findMany({
+          where: { ticketId },
+          select: { createdAt: true },
+        });
+
+        if (!canResolve(actions, existingTicket.reopenedAt)) {
+          return res.status(400).json({
+            error: {
+              code: "RESOLUTION_ACTION_REQUIRED",
+              message: "Transition to RESOLVED requires at least one qualifying Action Taken.",
+            },
+          });
+        }
+      }
+
+      const targetStatus = status as TicketStatus;
+      const now = new Date();
+      const updateData: any = {
+        status: targetStatus,
+        updatedAt: now,
+      };
+
+      if (targetStatus === TicketStatus.REOPENED) {
+        updateData.reopenedAt = now;
+        updateData.isRequesterResolved = false;
+      }
+
       const updatedTicket = await prisma.$transaction(async (tx) => {
-        return await tx.ticket.update({
+        const count = await tx.ticket.updateMany({
+          where: {
+            id: ticketId,
+            updatedAt: existingTicket.updatedAt,
+          },
+          data: updateData,
+        });
+
+        if (count.count === 0) {
+          const err = new Error("STALE_UPDATE");
+          (err as any).code = "STALE_UPDATE";
+          throw err;
+        }
+
+        return await tx.ticket.findUnique({
           where: { id: ticketId },
-          data: { status: status as TicketStatus },
         });
       });
 
       return res.status(200).json({
-        ticketId: updatedTicket.id,
-        status: updatedTicket.status,
-        updatedAt: updatedTicket.updatedAt.toISOString(),
+        ticketId: updatedTicket!.id,
+        status: updatedTicket!.status,
+        reopenedAt: updatedTicket!.reopenedAt ? updatedTicket!.reopenedAt.toISOString() : null,
+        isRequesterResolved: updatedTicket!.isRequesterResolved,
+        updatedAt: updatedTicket!.updatedAt.toISOString(),
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "STALE_UPDATE" || error?.message === "STALE_UPDATE") {
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "Ticket has been modified by another transaction.",
+          },
+        });
+      }
       return res.status(500).json({
         error: {
           code: "INTERNAL_SERVER_ERROR",

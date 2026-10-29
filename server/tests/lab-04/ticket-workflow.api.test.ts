@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -94,6 +94,18 @@ describe("Ticket Workflow & Lifecycle API Integration Tests (API-07..10, API-13,
       .send({ email: "admin.workflow@toktickit.local", password: "Password123!" });
     adminCookie = adminLogin.headers["set-cookie"][0];
   });
+  afterAll(async () => {
+    await prisma.actionTaken.deleteMany({
+      where: { performedById: adminUser.id },
+    });
+    await prisma.session.deleteMany({
+      where: { userId: adminUser.id },
+    });
+    await prisma.user.delete({
+      where: { id: adminUser.id },
+    }).catch(() => {});
+  });
+
 
   async function createTestTicket(status: TicketStatus = TicketStatus.IN_PROGRESS, extraData: any = {}) {
     return await prisma.ticket.create({

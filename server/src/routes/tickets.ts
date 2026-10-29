@@ -276,6 +276,7 @@ ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) 
         itPriority: true,
         status: true,
         isRequesterResolved: true,
+        reopenedAt: true,
         createdAt: true,
         updatedAt: true,
         requester: {
@@ -526,10 +527,24 @@ ticketsRouter.patch(
         });
       }
 
+      // Check terminal status (BR-11)
+      if (existingTicket.status === TicketStatus.CLOSED || existingTicket.status === TicketStatus.CANCELLED) {
+        return res.status(400).json({
+          error: {
+            code: "TICKET_TERMINAL",
+            message: "Cannot indicate resolution on a closed or cancelled ticket.",
+          },
+        });
+      }
+
+      const now = new Date();
       const updatedTicket = await prisma.$transaction(async (tx) => {
         const ticket = await tx.ticket.update({
           where: { id: ticketId },
-          data: { isRequesterResolved: true },
+          data: {
+            isRequesterResolved: true,
+            updatedAt: now,
+          },
         });
 
         await tx.publicComment.create({
@@ -549,6 +564,7 @@ ticketsRouter.patch(
           id: updatedTicket.id,
           status: updatedTicket.status,
           isRequesterResolved: updatedTicket.isRequesterResolved,
+          updatedAt: updatedTicket.updatedAt.toISOString(),
         },
       });
     } catch (error) {

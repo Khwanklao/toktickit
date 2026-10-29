@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -116,6 +116,18 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
       .send({ email: "admin.action.test@toktickit.local", password: "Password123!" });
     adminCookie = adminLogin.headers["set-cookie"][0];
   });
+  afterAll(async () => {
+    await prisma.actionTaken.deleteMany({
+      where: { performedById: adminUser.id },
+    });
+    await prisma.session.deleteMany({
+      where: { userId: adminUser.id },
+    });
+    await prisma.user.delete({
+      where: { id: adminUser.id },
+    }).catch(() => {});
+  });
+
 
   async function createTestTicket(status: TicketStatus = TicketStatus.OPEN, requesterId: string = reqUser.id) {
     return await prisma.ticket.create({
