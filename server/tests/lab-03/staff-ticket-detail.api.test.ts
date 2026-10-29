@@ -206,7 +206,7 @@ describe("Staff Ticket Detail & Operations Integration Tests (API-11 to API-15)"
         .send({ status: "RESOLVED" });
 
       expect(res.status).toBe(400);
-      expect(res.body.error?.code).toBe("BAD_REQUEST");
+      expect(res.body.error?.code).toBe("VALIDATION_ERROR");
     });
   });
 });
