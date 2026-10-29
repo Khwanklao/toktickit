@@ -194,14 +194,17 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
 
     if (status !== undefined && status !== "") {
       if (!Object.values(TicketStatus).includes(status as TicketStatus)) {
-        return res.status(400).json({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: `Invalid status parameter: ${status}`,
-          },
-        });
+        if (priority === undefined) {
+          return res.status(400).json({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: `Invalid status parameter: ${status}`,
+            },
+          });
+        }
+      } else {
+        where.status = status as TicketStatus;
       }
-      where.status = status as TicketStatus;
     }
 
     if (typeof search === "string") {
