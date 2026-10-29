@@ -266,6 +266,89 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
       expect(res.body.error.code).toBe("VALIDATION_ERROR");
       expect(res.body.error.details.length).toBeGreaterThanOrEqual(2);
     });
+
+    it("rejects non-boolean followUpRequired ('false', 'true', 0, 1) with 400 VALIDATION_ERROR and details entry on POST and PATCH", async () => {
+      const ticket = await createTestTicket();
+
+      // Test string 'false' on POST
+      const postResStr = await request(app)
+        .post(`/api/tickets/${ticket.id}/actions`)
+        .set("Cookie", staffCookie)
+        .send({
+          description: "Action with string boolean.",
+          result: "Should fail validation.",
+          followUpRequired: "false",
+        });
+
+      expect(postResStr.status).toBe(400);
+      expect(postResStr.body.error.code).toBe("VALIDATION_ERROR");
+      expect(postResStr.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: "followUpRequired" }),
+        ])
+      );
+
+      // Test number 1 on POST
+      const postResNum = await request(app)
+        .post(`/api/tickets/${ticket.id}/actions`)
+        .set("Cookie", staffCookie)
+        .send({
+          description: "Action with numeric boolean.",
+          result: "Should fail validation.",
+          followUpRequired: 1,
+        });
+
+      expect(postResNum.status).toBe(400);
+      expect(postResNum.body.error.code).toBe("VALIDATION_ERROR");
+      expect(postResNum.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: "followUpRequired" }),
+        ])
+      );
+
+      // Create a valid action to test PATCH
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          performedById: staffUser.id,
+          description: "Action for testing PATCH boolean.",
+          result: "Initial result.",
+          followUpRequired: false,
+        },
+      });
+
+      // Test string 'true' on PATCH
+      const patchResStr = await request(app)
+        .patch(`/api/tickets/${ticket.id}/actions/${action.id}`)
+        .set("Cookie", staffCookie)
+        .send({
+          followUpRequired: "true",
+        });
+
+      expect(patchResStr.status).toBe(400);
+      expect(patchResStr.body.error.code).toBe("VALIDATION_ERROR");
+      expect(patchResStr.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: "followUpRequired" }),
+        ])
+      );
+
+      // Test number 0 on PATCH
+      const patchResNum = await request(app)
+        .patch(`/api/tickets/${ticket.id}/actions/${action.id}`)
+        .set("Cookie", staffCookie)
+        .send({
+          followUpRequired: 0,
+        });
+
+      expect(patchResNum.status).toBe(400);
+      expect(patchResNum.body.error.code).toBe("VALIDATION_ERROR");
+      expect(patchResNum.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: "followUpRequired" }),
+        ])
+      );
+    });
   });
 
   describe("API-03: Role Restriction on Action Creation and Update", () => {
@@ -583,6 +666,21 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
       expect(colRes.status).toBe(405);
       expect(colRes.body.error.code).toBe("METHOD_NOT_ALLOWED");
       expect(colRes.body.error.message).toBe("Actions Taken records are append-only and cannot be deleted.");
+      expect(Array.isArray(colRes.body.error.details)).toBe(true);
+    });
+
+    it("unauthenticated DELETE /api/tickets/:id/actions and /:id/actions/:actionId return 401 UNAUTHORIZED with details: []", async () => {
+      const ticket = await createTestTicket();
+
+      const resCol = await request(app).delete(`/api/tickets/${ticket.id}/actions`);
+      expect(resCol.status).toBe(401);
+      expect(resCol.body.error.code).toBe("UNAUTHORIZED");
+      expect(Array.isArray(resCol.body.error.details)).toBe(true);
+
+      const resItem = await request(app).delete(`/api/tickets/${ticket.id}/actions/dummy-id`);
+      expect(resItem.status).toBe(401);
+      expect(resItem.body.error.code).toBe("UNAUTHORIZED");
+      expect(Array.isArray(resItem.body.error.details)).toBe(true);
     });
   });
 
@@ -700,6 +798,48 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
       expect(res.body.action.followUpNote).toBe("New mandatory follow-up note.");
       expect(new Date(res.body.action.createdAt).getTime()).toBe(action.createdAt.getTime());
       expect(res.body.ticketUpdatedAt).toBeDefined();
+    });
+  });
+  describe("API-32: Parallel Optimistic Concurrency on Action Update (AC-11, BR-16)", () => {
+    it("when two PATCH requests are sent in parallel with the same expectedUpdatedAt, exactly one returns 200 and the other returns 409 STALE_UPDATE", async () => {
+      const ticket = await createTestTicket();
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          performedById: staffUser.id,
+          description: "Initial action before concurrency test.",
+          result: "Initial result before concurrency test.",
+        },
+      });
+
+      const token = action.updatedAt.toISOString();
+
+      const [res1, res2] = await Promise.all([
+        request(app)
+          .patch(`/api/tickets/${ticket.id}/actions/${action.id}`)
+          .set("Cookie", staffCookie)
+          .send({
+            description: "Concurrent update candidate 1",
+            expectedUpdatedAt: token,
+          }),
+        request(app)
+          .patch(`/api/tickets/${ticket.id}/actions/${action.id}`)
+          .set("Cookie", staffCookie)
+          .send({
+            description: "Concurrent update candidate 2",
+            expectedUpdatedAt: token,
+          }),
+      ]);
+
+      const statuses = [res1.status, res2.status].sort();
+      expect(statuses).toEqual([200, 409]);
+
+      const successRes = res1.status === 200 ? res1 : res2;
+      const staleRes = res1.status === 409 ? res1 : res2;
+
+      expect(successRes.body.action).toBeDefined();
+      expect(staleRes.body.error.code).toBe("STALE_UPDATE");
+      expect(Array.isArray(staleRes.body.error.details)).toBe(true);
     });
   });
 });

@@ -294,6 +294,38 @@ describe("Ticket Workflow & Lifecycle API Integration Tests (API-07..10, API-13,
       expect(res.status).toBe(200);
       expect(res.body.status).toBe("IN_PROGRESS");
     });
+
+    it("handles parallel status updates atomically: exactly one succeeds and one returns 409 STALE_UPDATE", async () => {
+      const ticket = await createTestTicket(TicketStatus.OPEN);
+      const token = ticket.updatedAt.toISOString();
+
+      const [res1, res2] = await Promise.all([
+        request(app)
+          .patch(`/api/staff/tickets/${ticket.id}/status`)
+          .set("Cookie", staffCookie)
+          .send({
+            status: "IN_PROGRESS",
+            expectedUpdatedAt: token,
+          }),
+        request(app)
+          .patch(`/api/staff/tickets/${ticket.id}/status`)
+          .set("Cookie", staffCookie)
+          .send({
+            status: "IN_PROGRESS",
+            expectedUpdatedAt: token,
+          }),
+      ]);
+
+      const statuses = [res1.status, res2.status].sort();
+      expect(statuses).toEqual([200, 409]);
+
+      const successRes = res1.status === 200 ? res1 : res2;
+      const staleRes = res1.status === 409 ? res1 : res2;
+
+      expect(successRes.body.status).toBe("IN_PROGRESS");
+      expect(staleRes.body.error.code).toBe("STALE_UPDATE");
+      expect(Array.isArray(staleRes.body.error.details)).toBe(true);
+    });
   });
 
   describe("API-13: Administrator Operational Boundary (BR-09)", () => {
@@ -350,6 +382,44 @@ describe("Ticket Workflow & Lifecycle API Integration Tests (API-07..10, API-13,
 
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("returns identical 400 VALIDATION_ERROR with details array across different seeded IT Staff accounts (alex, sarah, david)", async () => {
+      const accounts = [
+        "staff.alex@toktickit.local",
+        "staff.sarah@toktickit.local",
+        "staff.david@toktickit.local",
+      ];
+
+      for (const email of accounts) {
+        const loginRes = await request(app)
+          .post("/api/auth/login")
+          .send({ email, password: "Password123!" });
+        expect(loginRes.status).toBe(200);
+        const cookie = loginRes.headers["set-cookie"][0];
+
+        // 1. Invalid status value
+        const ticket1 = await createTestTicket(TicketStatus.OPEN);
+        const resInvalidStatus = await request(app)
+          .patch(`/api/staff/tickets/${ticket1.id}/status`)
+          .set("Cookie", cookie)
+          .send({ status: "NON_EXISTENT_STATUS" });
+
+        expect(resInvalidStatus.status).toBe(400);
+        expect(resInvalidStatus.body.error.code).toBe("VALIDATION_ERROR");
+        expect(Array.isArray(resInvalidStatus.body.error.details)).toBe(true);
+
+        // 2. Invalid transition (NEW -> RESOLVED)
+        const ticket2 = await createTestTicket(TicketStatus.NEW);
+        const resInvalidTransition = await request(app)
+          .patch(`/api/staff/tickets/${ticket2.id}/status`)
+          .set("Cookie", cookie)
+          .send({ status: "RESOLVED" });
+
+        expect(resInvalidTransition.status).toBe(400);
+        expect(resInvalidTransition.body.error.code).toBe("VALIDATION_ERROR");
+        expect(Array.isArray(resInvalidTransition.body.error.details)).toBe(true);
+      }
     });
   });
 
