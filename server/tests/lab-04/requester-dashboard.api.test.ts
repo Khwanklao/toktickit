@@ -128,7 +128,7 @@ describe("Requester Dashboard & Query API Integration Tests (API-14, API-17, API
     ];
 
     for (let i = 0; i < statuses.length; i++) {
-      await prisma.ticket.create({
+      const createdTicket = await prisma.ticket.create({
         data: {
           ticketNumber: `TKT-REQ-DASH-${Date.now()}-${i}`,
           requesterId: reqUser.id,
@@ -142,6 +142,18 @@ describe("Requester Dashboard & Query API Integration Tests (API-14, API-17, API
           updatedAt: new Date(Date.now() - (10 - i) * 60000), // staggered timestamps
         },
       });
+
+      if (statuses[i] === TicketStatus.RESOLVED || statuses[i] === TicketStatus.CLOSED) {
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: createdTicket.id,
+            performedById: staffUser.id,
+            description: "Resolution action taken",
+            result: "Resolved successfully",
+            actionDateTime: new Date(),
+          },
+        });
+      }
     }
   });
 
@@ -343,3 +355,4 @@ describe("Requester Dashboard & Query API Integration Tests (API-14, API-17, API
     });
   });
 });
+

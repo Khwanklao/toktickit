@@ -117,20 +117,23 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
     adminCookie = adminLogin.headers["set-cookie"][0];
   });
   afterAll(async () => {
+    await prisma.ticket.deleteMany({
+      where: { requesterId: { in: [reqUser.id, otherReqUser.id] } },
+    }).catch(() => {});
     await prisma.actionTaken.deleteMany({
-      where: { performedById: adminUser.id },
-    });
+      where: { performedById: { in: [adminUser.id, staffUser.id] } },
+    }).catch(() => {});
     await prisma.session.deleteMany({
-      where: { userId: adminUser.id },
-    });
-    await prisma.user.delete({
-      where: { id: adminUser.id },
+      where: { userId: { in: [reqUser.id, otherReqUser.id, staffUser.id, adminUser.id] } },
+    }).catch(() => {});
+    await prisma.user.deleteMany({
+      where: { id: { in: [reqUser.id, otherReqUser.id, staffUser.id, adminUser.id] } },
     }).catch(() => {});
   });
 
 
   async function createTestTicket(status: TicketStatus = TicketStatus.OPEN, requesterId: string = reqUser.id) {
-    return await prisma.ticket.create({
+    const t = await prisma.ticket.create({
       data: {
         ticketNumber: `TKT-ACT-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         requesterId,
@@ -143,6 +146,20 @@ describe("Actions Taken API Integration Tests (API-01..06, API-11, API-12, API-1
         status,
       },
     });
+
+    if (status === TicketStatus.RESOLVED || status === TicketStatus.CLOSED) {
+      await prisma.actionTaken.create({
+        data: {
+          ticketId: t.id,
+          performedById: staffUser.id,
+          description: "Pre-existing action for terminal/resolved ticket",
+          result: "Done",
+          actionDateTime: new Date(),
+        },
+      });
+    }
+
+    return t;
   }
 
   describe("API-01: Create Action Taken (POST /api/tickets/:id/actions)", () => {

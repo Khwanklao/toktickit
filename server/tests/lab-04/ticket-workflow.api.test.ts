@@ -95,20 +95,23 @@ describe("Ticket Workflow & Lifecycle API Integration Tests (API-07..10, API-13,
     adminCookie = adminLogin.headers["set-cookie"][0];
   });
   afterAll(async () => {
+    await prisma.ticket.deleteMany({
+      where: { requesterId: reqUser.id },
+    }).catch(() => {});
     await prisma.actionTaken.deleteMany({
-      where: { performedById: adminUser.id },
-    });
+      where: { performedById: { in: [adminUser.id, staffUser.id] } },
+    }).catch(() => {});
     await prisma.session.deleteMany({
-      where: { userId: adminUser.id },
-    });
-    await prisma.user.delete({
-      where: { id: adminUser.id },
+      where: { userId: { in: [reqUser.id, staffUser.id, adminUser.id] } },
+    }).catch(() => {});
+    await prisma.user.deleteMany({
+      where: { id: { in: [reqUser.id, staffUser.id, adminUser.id] } },
     }).catch(() => {});
   });
 
 
   async function createTestTicket(status: TicketStatus = TicketStatus.IN_PROGRESS, extraData: any = {}) {
-    return await prisma.ticket.create({
+    const t = await prisma.ticket.create({
       data: {
         ticketNumber: `TKT-WF-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         requesterId: reqUser.id,
@@ -122,6 +125,20 @@ describe("Ticket Workflow & Lifecycle API Integration Tests (API-07..10, API-13,
         ...extraData,
       },
     });
+
+    if (status === TicketStatus.RESOLVED || status === TicketStatus.CLOSED) {
+      await prisma.actionTaken.create({
+        data: {
+          ticketId: t.id,
+          performedById: staffUser.id,
+          description: "Pre-existing resolution action",
+          result: "Issue resolved",
+          actionDateTime: new Date(),
+        },
+      });
+    }
+
+    return t;
   }
 
   describe("API-07: Resolution Gate on Active Tickets (BR-12)", () => {

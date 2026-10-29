@@ -387,3 +387,4 @@ describe("Sprint 4 Authorization & Server-Side RBAC Matrix (AUTH-01..AUTH-04)", 
     });
   });
 });
+

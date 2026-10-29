@@ -190,7 +190,7 @@ describe("Staff Dashboard & Queue Query API Integration Tests (API-15, API-18, A
     });
 
     // 1 CLOSED (assigned to staffUser)
-    await prisma.ticket.create({
+    const closedTicket = await prisma.ticket.create({
       data: {
         ticketNumber: `TKT-SD-${Date.now()}-6`,
         requesterId: reqUser.id,
@@ -202,6 +202,16 @@ describe("Staff Dashboard & Queue Query API Integration Tests (API-15, API-18, A
         itPriority: Priority.LOW,
         status: TicketStatus.CLOSED,
         ownerId: staffUser.id,
+      },
+    });
+
+    await prisma.actionTaken.create({
+      data: {
+        ticketId: closedTicket.id,
+        performedById: staffUser.id,
+        description: "Closed action taken",
+        result: "Issue resolved and closed",
+        actionDateTime: new Date(),
       },
     });
   });
@@ -394,3 +404,4 @@ describe("Staff Dashboard & Queue Query API Integration Tests (API-15, API-18, A
     });
   });
 });
+
