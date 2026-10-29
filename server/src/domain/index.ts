@@ -6,3 +6,5 @@ export * from "./concurrency.js";
 export * from "./transition-matrix.js";
 export * from "./dashboard-metrics.js";
 export * from "./query-parser.js";
+
+export * from "./queue-filter.js";

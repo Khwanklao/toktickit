@@ -3,7 +3,7 @@ import { Role, TicketStatus, Priority } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 import { authenticateUser, requireRole } from "../utils/auth.js";
 import { isValidStatusTransition } from "../utils/status-transition.js";
-import { canTransition, canResolve, isStale, ValidationError, parseQueueFilters, ParsedQueueFilters } from "../domain/index.js";
+import { canTransition, canResolve, isStale, ValidationError, parseQueueFilters, ParsedQueueFilters, OPEN_GROUP_STATUSES, TERMINAL_STATUSES } from "../domain/index.js";
 import { AuthenticatedRequest } from "../utils/auth.js";
 import { isValidPriority } from "../utils/priority-logic.js";
 
@@ -140,7 +140,7 @@ staffRouter.get(
 
       // Status & Group filtering
       if (parsedFilters.group === "open") {
-        where.status = { in: [TicketStatus.OPEN, TicketStatus.REOPENED] };
+        where.status = { in: OPEN_GROUP_STATUSES };
       } else if (status) {
         where.status = status as TicketStatus;
       }
@@ -148,7 +148,7 @@ staffRouter.get(
       // ActiveOnly filter
       if (parsedFilters.activeOnly) {
         if (!where.status) {
-          where.status = { notIn: [TicketStatus.CLOSED, TicketStatus.CANCELLED] };
+          where.status = { notIn: TERMINAL_STATUSES };
         }
       }
 
@@ -426,17 +426,7 @@ staffRouter.patch(
         });
       }
 
-      if (!canTransition(existingTicket.status, status as TicketStatus)) {
-        return res.status(400).json({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: `Invalid status transition from ${existingTicket.status} to ${status}`,
-            details: [],
-          },
-        });
-      }
-
-      // Concurrency check (BR-16)
+      // Concurrency check (BR-16): Check expectedUpdatedAt BEFORE checking transition rules
       if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
         try {
           if (isStale(expectedUpdatedAt, existingTicket.updatedAt)) {
@@ -460,6 +450,16 @@ staffRouter.patch(
           }
           throw err;
         }
+      }
+
+      if (!canTransition(existingTicket.status, status as TicketStatus)) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: `Invalid status transition from ${existingTicket.status} to ${status}`,
+            details: [],
+          },
+        });
       }
 
       // Resolution Gate check (BR-12)
@@ -568,7 +568,7 @@ staffRouter.get(
         const count = group._count.id;
         if (group.status === TicketStatus.NEW) {
           newTickets += count;
-        } else if (group.status === TicketStatus.OPEN || group.status === TicketStatus.REOPENED) {
+        } else if (OPEN_GROUP_STATUSES.includes(group.status)) {
           openTickets += count;
         } else if (group.status === TicketStatus.IN_PROGRESS) {
           inProgressTickets += count;
@@ -581,7 +581,7 @@ staffRouter.get(
       const myAssignedTickets = await prisma.ticket.count({
         where: {
           ownerId: user.id,
-          status: { notIn: [TicketStatus.CLOSED, TicketStatus.CANCELLED] },
+          status: { notIn: TERMINAL_STATUSES },
         },
       });
 

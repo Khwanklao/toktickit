@@ -32,7 +32,13 @@ export function validateActionInput(data: ActionInputData): ValidationResult {
   }
 
   // Follow-up validation: required 5 to 2,000 chars when followUpRequired is true
-  if (data.followUpRequired) {
+  if (data.followUpRequired !== undefined && data.followUpRequired !== null && typeof data.followUpRequired !== "boolean") {
+    errors.push({
+      field: "followUpRequired",
+      code: "VALIDATION_ERROR",
+      message: "followUpRequired must be a boolean.",
+    });
+  } else if (data.followUpRequired === true) {
     const note = typeof data.followUpNote === "string" ? data.followUpNote.trim() : "";
     if (!note || note.length < 5 || note.length > 2000) {
       errors.push({

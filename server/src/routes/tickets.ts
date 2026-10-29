@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { Role, TicketStatus } from "@prisma/client";
-import { validateActionInput, validateActionDate, isStale, ValidationError } from "../domain/index.js";
+import { validateActionInput, validateActionDate, isStale, ValidationError, ACTIVE_STATUSES } from "../domain/index.js";
 import { getPrisma } from "../prisma.js";
 import { generateTicketNumber } from "../utils/ticket-number.js";
 import { authenticateUser, requireRole, authenticateRequester, AuthenticatedRequest } from "../utils/auth.js";
@@ -182,13 +182,7 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
         });
       }
       where.status = {
-        in: [
-          TicketStatus.NEW,
-          TicketStatus.OPEN,
-          TicketStatus.IN_PROGRESS,
-          TicketStatus.WAITING_FOR_REQUESTER,
-          TicketStatus.REOPENED,
-        ],
+        in: ACTIVE_STATUSES,
       };
     }
 
@@ -574,6 +568,7 @@ ticketsRouter.patch(
           error: {
             code: "TICKET_TERMINAL",
             message: "Cannot indicate resolution on a closed or cancelled ticket.",
+            details: [],
           },
         });
       }
@@ -907,7 +902,7 @@ ticketsRouter.post(
 // ---------------------------------------------------------------------------
 
 // DELETE /api/tickets/:id/actions and /:id/actions/:actionId (BR-07, AC-20)
-ticketsRouter.delete("/:id/actions", (_req: Request, res: Response) => {
+ticketsRouter.delete("/:id/actions", authenticateUser, (_req: Request, res: Response) => {
   return res.status(405).json({
     error: {
       code: "METHOD_NOT_ALLOWED",
@@ -917,7 +912,7 @@ ticketsRouter.delete("/:id/actions", (_req: Request, res: Response) => {
   });
 });
 
-ticketsRouter.delete("/:id/actions/:actionId", (_req: Request, res: Response) => {
+ticketsRouter.delete("/:id/actions/:actionId", authenticateUser, (_req: Request, res: Response) => {
   return res.status(405).json({
     error: {
       code: "METHOD_NOT_ALLOWED",
@@ -940,7 +935,7 @@ ticketsRouter.get("/:id/actions", authenticateUser, async (req: Request, res: Re
     const ticketId = Number(req.params.id);
     if (isNaN(ticketId) || ticketId <= 0) {
       return res.status(404).json({
-        error: { code: "NOT_FOUND", message: "Ticket not found." },
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
       });
     }
 
@@ -951,14 +946,14 @@ ticketsRouter.get("/:id/actions", authenticateUser, async (req: Request, res: Re
 
     if (!ticket) {
       return res.status(404).json({
-        error: { code: "NOT_FOUND", message: "Ticket not found." },
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
       });
     }
 
     // Requester only for own tickets (other ticket -> 404 NOT_FOUND)
     if (user.role === Role.REQUESTER && ticket.requesterId !== user.id) {
       return res.status(404).json({
-        error: { code: "NOT_FOUND", message: "Ticket not found." },
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
       });
     }
 
@@ -1001,7 +996,7 @@ ticketsRouter.get("/:id/actions", authenticateUser, async (req: Request, res: Re
     });
   } catch (error) {
     return res.status(500).json({
-      error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to retrieve actions taken." },
+      error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to retrieve actions taken.", details: [] },
     });
   }
 });
@@ -1016,14 +1011,14 @@ ticketsRouter.post(
       const user = (req as AuthenticatedRequest).user;
       if (!user) {
         return res.status(401).json({
-          error: { code: "UNAUTHORIZED", message: "Not authenticated." },
+          error: { code: "UNAUTHORIZED", message: "Not authenticated.", details: [] },
         });
       }
 
       const ticketId = Number(req.params.id);
       if (isNaN(ticketId) || ticketId <= 0) {
         return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Ticket not found." },
+          error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
         });
       }
 
@@ -1034,7 +1029,7 @@ ticketsRouter.post(
 
       if (!ticket) {
         return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Ticket not found." },
+          error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
         });
       }
 
@@ -1044,6 +1039,7 @@ ticketsRouter.post(
           error: {
             code: "TICKET_TERMINAL",
             message: "Cannot create actions on a closed or cancelled ticket.",
+            details: [],
           },
         });
       }
@@ -1057,11 +1053,27 @@ ticketsRouter.post(
         attachmentNotes,
       } = req.body || {};
 
+      if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "followUpRequired must be a boolean.",
+            details: [
+              {
+                field: "followUpRequired",
+                code: "VALIDATION_ERROR",
+                message: "followUpRequired must be a boolean.",
+              },
+            ],
+          },
+        });
+      }
+
       // Validate action input (BR-03, BR-04)
       const inputValidation = validateActionInput({
         description,
         result,
-        followUpRequired: Boolean(followUpRequired),
+        followUpRequired,
         followUpNote,
         attachmentNotes,
       });
@@ -1143,7 +1155,7 @@ ticketsRouter.post(
       });
     } catch (error) {
       return res.status(500).json({
-        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create action taken." },
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create action taken.", details: [] },
       });
     }
   }
@@ -1159,7 +1171,7 @@ ticketsRouter.patch(
       const user = (req as AuthenticatedRequest).user;
       if (!user) {
         return res.status(401).json({
-          error: { code: "UNAUTHORIZED", message: "Not authenticated." },
+          error: { code: "UNAUTHORIZED", message: "Not authenticated.", details: [] },
         });
       }
 
@@ -1167,47 +1179,7 @@ ticketsRouter.patch(
       const actionId = req.params.actionId;
       if (isNaN(ticketId) || ticketId <= 0 || !actionId) {
         return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Resource not found." },
-        });
-      }
-
-      const prisma = getPrisma();
-      const ticket = await prisma.ticket.findUnique({
-        where: { id: ticketId },
-      });
-
-      if (!ticket) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Ticket not found." },
-        });
-      }
-
-      // Terminal ticket check (BR-06)
-      if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.CANCELLED) {
-        return res.status(400).json({
-          error: {
-            code: "TICKET_TERMINAL",
-            message: "Cannot modify actions on a closed or cancelled ticket.",
-          },
-        });
-      }
-
-      const existingAction = await prisma.actionTaken.findFirst({
-        where: { id: actionId, ticketId },
-        include: {
-          performedBy: {
-            select: {
-              id: true,
-              name: true,
-              role: true,
-            },
-          },
-        },
-      });
-
-      if (!existingAction) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Action taken not found." },
+          error: { code: "NOT_FOUND", message: "Resource not found.", details: [] },
         });
       }
 
@@ -1221,91 +1193,163 @@ ticketsRouter.patch(
         attachmentNotes,
       } = req.body || {};
 
-      // Concurrency check (BR-16)
+      // 1. Validate expectedUpdatedAt first (Item 2)
       if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
-        try {
-          if (isStale(expectedUpdatedAt, existingAction.updatedAt)) {
-            return res.status(409).json({
-              error: {
-                code: "STALE_UPDATE",
-                message: "Action has been modified by another user.",
-              },
-            });
-          }
-        } catch (err: any) {
-          if (err instanceof ValidationError) {
-            return res.status(400).json({
-              error: {
-                code: "VALIDATION_ERROR",
-                message: err.message,
-                details: err.errors,
-              },
-            });
-          }
-          throw err;
-        }
-      }
-
-      // Merge values
-      const mergedDescription = description !== undefined ? description : existingAction.description;
-      const mergedResult = result !== undefined ? result : existingAction.result;
-      const mergedFollowUpRequired = followUpRequired !== undefined ? Boolean(followUpRequired) : existingAction.followUpRequired;
-      const mergedFollowUpNote = followUpNote !== undefined ? followUpNote : existingAction.followUpNote;
-      const mergedAttachmentNotes = attachmentNotes !== undefined ? attachmentNotes : existingAction.attachmentNotes;
-
-      // Validate merged inputs
-      const inputValidation = validateActionInput({
-        description: mergedDescription,
-        result: mergedResult,
-        followUpRequired: mergedFollowUpRequired,
-        followUpNote: mergedFollowUpNote,
-        attachmentNotes: mergedAttachmentNotes,
-      });
-
-      if (!inputValidation.ok) {
-        return res.status(400).json({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Action input validation failed.",
-            details: inputValidation.errors,
-          },
-        });
-      }
-
-      let actionDateToUse = existingAction.actionDateTime;
-      if (actionDateTime !== undefined && actionDateTime !== null) {
-        actionDateToUse = new Date(actionDateTime);
-        const dateValidation = validateActionDate(actionDateToUse, ticket.createdAt);
-        if (!dateValidation.ok) {
+        if (typeof expectedUpdatedAt !== "string" || isNaN(new Date(expectedUpdatedAt).getTime())) {
           return res.status(400).json({
             error: {
-              code: "INVALID_ACTION_DATE",
-              message: "Action date/time validation failed.",
-              details: dateValidation.errors,
+              code: "VALIDATION_ERROR",
+              message: "Invalid date format for expectedUpdatedAt.",
+              details: [
+                {
+                  field: "expectedUpdatedAt",
+                  code: "VALIDATION_ERROR",
+                  message: "Invalid date format for expectedUpdatedAt.",
+                },
+              ],
             },
           });
         }
       }
 
-      const updatedAction = await prisma.actionTaken.update({
-        where: { id: actionId },
-        data: {
-          actionDateTime: actionDateToUse,
-          description: typeof mergedDescription === "string" ? mergedDescription.trim() : mergedDescription,
-          result: typeof mergedResult === "string" ? mergedResult.trim() : mergedResult,
+      // Validate followUpRequired strictly as boolean if provided (Item 5)
+      if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "followUpRequired must be a boolean.",
+            details: [
+              {
+                field: "followUpRequired",
+                code: "VALIDATION_ERROR",
+                message: "followUpRequired must be a boolean.",
+              },
+            ],
+          },
+        });
+      }
+
+      const prisma = getPrisma();
+
+      // 2. Atomic transaction (Item 2)
+      const { updatedAction, touchedTicket } = await prisma.$transaction(async (tx) => {
+        // Confirm ticket exists
+        const ticket = await tx.ticket.findUnique({
+          where: { id: ticketId },
+        });
+
+        if (!ticket) {
+          const err: any = new Error("TICKET_NOT_FOUND");
+          err.code = "TICKET_NOT_FOUND";
+          throw err;
+        }
+
+        // Reject terminal ticket (BR-06)
+        if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.CANCELLED) {
+          const err: any = new Error("TICKET_TERMINAL");
+          err.code = "TICKET_TERMINAL";
+          throw err;
+        }
+
+        // Confirm action exists
+        const existingAction = await tx.actionTaken.findFirst({
+          where: { id: actionId, ticketId },
+        });
+
+        if (!existingAction) {
+          const err: any = new Error("ACTION_NOT_FOUND");
+          err.code = "ACTION_NOT_FOUND";
+          throw err;
+        }
+
+        // Concurrency check (BR-16): Check stale token before input validation
+        if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+          if (isStale(expectedUpdatedAt, existingAction.updatedAt)) {
+            const err: any = new Error("STALE_UPDATE");
+            err.code = "STALE_UPDATE";
+            throw err;
+          }
+        }
+
+        // Merge values
+        const mergedDescription = description !== undefined ? description : existingAction.description;
+        const mergedResult = result !== undefined ? result : existingAction.result;
+        const mergedFollowUpRequired = followUpRequired !== undefined ? followUpRequired : existingAction.followUpRequired;
+        const mergedFollowUpNote = followUpNote !== undefined ? followUpNote : existingAction.followUpNote;
+        const mergedAttachmentNotes = attachmentNotes !== undefined ? attachmentNotes : existingAction.attachmentNotes;
+
+        // Validate merged inputs
+        const inputValidation = validateActionInput({
+          description: mergedDescription,
+          result: mergedResult,
           followUpRequired: mergedFollowUpRequired,
-          followUpNote: mergedFollowUpRequired && typeof mergedFollowUpNote === "string" ? mergedFollowUpNote.trim() : (mergedFollowUpRequired ? mergedFollowUpNote : null),
-          attachmentNotes: mergedAttachmentNotes ? (typeof mergedAttachmentNotes === "string" ? mergedAttachmentNotes.trim() : mergedAttachmentNotes) : null,
-        },
-        include: {
-          performedBy: {
-            select: {
-              id: true,
-              name: true,
-              role: true,
+          followUpNote: mergedFollowUpNote,
+          attachmentNotes: mergedAttachmentNotes,
+        });
+
+        if (!inputValidation.ok) {
+          const err: any = new Error("VALIDATION_ERROR");
+          err.code = "VALIDATION_ERROR";
+          err.details = inputValidation.errors;
+          throw err;
+        }
+
+        let actionDateToUse = existingAction.actionDateTime;
+        if (actionDateTime !== undefined && actionDateTime !== null) {
+          actionDateToUse = new Date(actionDateTime);
+          const dateValidation = validateActionDate(actionDateToUse, ticket.createdAt);
+          if (!dateValidation.ok) {
+            const err: any = new Error("INVALID_ACTION_DATE");
+            err.code = "INVALID_ACTION_DATE";
+            err.details = dateValidation.errors;
+            throw err;
+          }
+        }
+
+        // Atomic update with conditional expectedUpdatedAt if token sent
+        const whereClause: any = { id: actionId, ticketId };
+        if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+          whereClause.updatedAt = new Date(expectedUpdatedAt);
+        }
+
+        const updateResult = await tx.actionTaken.updateMany({
+          where: whereClause,
+          data: {
+            actionDateTime: actionDateToUse,
+            description: typeof mergedDescription === "string" ? mergedDescription.trim() : mergedDescription,
+            result: typeof mergedResult === "string" ? mergedResult.trim() : mergedResult,
+            followUpRequired: mergedFollowUpRequired,
+            followUpNote: mergedFollowUpRequired && typeof mergedFollowUpNote === "string" ? mergedFollowUpNote.trim() : (mergedFollowUpRequired ? mergedFollowUpNote : null),
+            attachmentNotes: mergedAttachmentNotes ? (typeof mergedAttachmentNotes === "string" ? mergedAttachmentNotes.trim() : mergedAttachmentNotes) : null,
+          },
+        });
+
+        if (updateResult.count === 0) {
+          const err: any = new Error("STALE_UPDATE");
+          err.code = "STALE_UPDATE";
+          throw err;
+        }
+
+        // Re-read action in same transaction
+        const reReadAction = await tx.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
             },
           },
-        },
+        });
+
+        const touchedTicket = await tx.ticket.update({
+          where: { id: ticketId },
+          data: { updatedAt: new Date() },
+        });
+
+        return { updatedAction: reReadAction!, touchedTicket };
       });
 
       return res.status(200).json({
@@ -1326,11 +1370,52 @@ ticketsRouter.patch(
           createdAt: updatedAction.createdAt.toISOString(),
           updatedAt: updatedAction.updatedAt.toISOString(),
         },
-        ticketUpdatedAt: ticket.updatedAt.toISOString(),
+        ticketUpdatedAt: touchedTicket.updatedAt.toISOString(),
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "TICKET_NOT_FOUND" || error?.code === "ACTION_NOT_FOUND") {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Resource not found.", details: [] },
+        });
+      }
+      if (error?.code === "TICKET_TERMINAL") {
+        return res.status(400).json({
+          error: {
+            code: "TICKET_TERMINAL",
+            message: "Cannot modify actions on a closed or cancelled ticket.",
+            details: [],
+          },
+        });
+      }
+      if (error?.code === "VALIDATION_ERROR") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Action input validation failed.",
+            details: error.details || [],
+          },
+        });
+      }
+      if (error?.code === "INVALID_ACTION_DATE") {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_ACTION_DATE",
+            message: "Action date/time validation failed.",
+            details: error.details || [],
+          },
+        });
+      }
+      if (error?.code === "STALE_UPDATE") {
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "Action has been modified by another user.",
+            details: [],
+          },
+        });
+      }
       return res.status(500).json({
-        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to update action taken." },
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to update action taken.", details: [] },
       });
     }
   }

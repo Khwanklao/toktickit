@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { Role, TicketStatus } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 import { authenticateUser, requireRole, AuthenticatedRequest } from "../utils/auth.js";
-import { checkNeedsAttention } from "../domain/index.js";
+import { checkNeedsAttention, ACTIVE_STATUSES } from "../domain/index.js";
 
 export const requesterRouter = Router();
 
@@ -87,7 +87,7 @@ requesterRouter.get(
       });
     } catch (error) {
       return res.status(500).json({
-        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch requester dashboard" },
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch requester dashboard", details: [] },
       });
     }
   }
