@@ -160,7 +160,49 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
       requesterId,
     };
 
-    const { search, categoryId, priority, status, sortBy, sortDir, page, pageSize } = req.query;
+    const { search, categoryId, priority, status, group, sortBy, sortDir, page, pageSize } = req.query;
+
+    // Validate group and status combination (Sec 5.2 / AC-14)
+    if (group !== undefined && status !== undefined) {
+      return res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Cannot provide both 'group' and 'status' filters simultaneously.",
+        },
+      });
+    }
+
+    if (group !== undefined) {
+      if (group !== "open") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Group filter supports only the value 'open'.",
+          },
+        });
+      }
+      where.status = {
+        in: [
+          TicketStatus.NEW,
+          TicketStatus.OPEN,
+          TicketStatus.IN_PROGRESS,
+          TicketStatus.WAITING_FOR_REQUESTER,
+          TicketStatus.REOPENED,
+        ],
+      };
+    }
+
+    if (status !== undefined && status !== "") {
+      if (!Object.values(TicketStatus).includes(status as TicketStatus)) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: `Invalid status parameter: ${status}`,
+          },
+        });
+      }
+      where.status = status as TicketStatus;
+    }
 
     if (typeof search === "string") {
       const trimmedSearch = search.trim();
@@ -181,10 +223,6 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
 
     if (typeof priority === "string" && VALID_PRIORITIES.includes(priority)) {
       where.requestedPriority = priority;
-    }
-
-    if (typeof status === "string" && VALID_STATUSES.includes(status)) {
-      where.status = status;
     }
 
     const effectiveSortBy = typeof sortBy === "string" && VALID_SORT_FIELDS.includes(sortBy) ? sortBy : "createdAt";

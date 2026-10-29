@@ -3,7 +3,7 @@ import { Role, TicketStatus, Priority } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 import { authenticateUser, requireRole } from "../utils/auth.js";
 import { isValidStatusTransition } from "../utils/status-transition.js";
-import { canTransition, canResolve, isStale, ValidationError } from "../domain/index.js";
+import { canTransition, canResolve, isStale, ValidationError, parseQueueFilters, ParsedQueueFilters } from "../domain/index.js";
 import { AuthenticatedRequest } from "../utils/auth.js";
 import { isValidPriority } from "../utils/priority-logic.js";
 
@@ -22,6 +22,7 @@ staffRouter.get(
   requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
   async (req: Request, res: Response) => {
     try {
+      const user = (req as AuthenticatedRequest).user!;
       const {
         page = "1",
         limit = "10",
@@ -32,7 +33,28 @@ staffRouter.get(
         ownerId,
         sortBy = "createdAt",
         sortOrder = "desc",
+        group,
+        activeOnly,
       } = req.query;
+
+      // Parse and validate Lab 4 new queue filters (Sec 5.3, UNIT-08)
+      let parsedFilters: ParsedQueueFilters = {};
+      if (group !== undefined || activeOnly !== undefined || ownerId === "me") {
+        try {
+          parsedFilters = parseQueueFilters(req.query, user.id);
+        } catch (err: any) {
+          if (err instanceof ValidationError) {
+            return res.status(400).json({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: err.message,
+                details: err.errors,
+              },
+            });
+          }
+          throw err;
+        }
+      }
 
       // Validate numeric pagination parameters
       const parsedPage = Number(page);
@@ -55,8 +77,8 @@ staffRouter.get(
         });
       }
 
-      // Validate enums
-      if (status !== undefined && status !== "") {
+      // Validate status enum for legacy Lab 3
+      if (status !== undefined && status !== "" && group === undefined) {
         if (!Object.values(TicketStatus).includes(status as TicketStatus)) {
           return res.status(400).json({
             error: {
@@ -116,15 +138,29 @@ staffRouter.get(
         }
       }
 
-      if (status) {
+      // Status & Group filtering
+      if (parsedFilters.group === "open") {
+        where.status = { in: [TicketStatus.OPEN, TicketStatus.REOPENED] };
+      } else if (status) {
         where.status = status as TicketStatus;
       }
 
+      // ActiveOnly filter
+      if (parsedFilters.activeOnly) {
+        if (!where.status) {
+          where.status = { notIn: [TicketStatus.CLOSED, TicketStatus.CANCELLED] };
+        }
+      }
+
+      // itPriority filter
       if (itPriority) {
         where.itPriority = itPriority as Priority;
       }
 
-      if (ownerId !== undefined && ownerId !== "") {
+      // Owner filter
+      if (parsedFilters.ownerId !== undefined) {
+        where.ownerId = parsedFilters.ownerId;
+      } else if (ownerId !== undefined && ownerId !== "") {
         if (ownerId === "unassigned") {
           where.ownerId = null;
         } else {
@@ -495,6 +531,97 @@ staffRouter.patch(
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to update ticket status",
         },
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/staff/dashboard
+ * Access: IT_STAFF, ADMINISTRATOR (Requester -> 403 Forbidden, Unauth -> 401 Unauthorized)
+ */
+staffRouter.get(
+  "/dashboard",
+  authenticateUser,
+  requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthenticatedRequest).user!;
+      const prisma = getPrisma();
+
+      // 1. GroupBy status for all tickets (database calculation)
+      const statusCounts = await prisma.ticket.groupBy({
+        by: ["status"],
+        _count: { id: true },
+      });
+
+      let newTickets = 0;
+      let openTickets = 0;
+      let inProgressTickets = 0;
+      let waitingRequesterTickets = 0;
+
+      for (const group of statusCounts) {
+        const count = group._count.id;
+        if (group.status === TicketStatus.NEW) {
+          newTickets += count;
+        } else if (group.status === TicketStatus.OPEN || group.status === TicketStatus.REOPENED) {
+          openTickets += count;
+        } else if (group.status === TicketStatus.IN_PROGRESS) {
+          inProgressTickets += count;
+        } else if (group.status === TicketStatus.WAITING_FOR_REQUESTER) {
+          waitingRequesterTickets += count;
+        }
+      }
+
+      // 2. Count my assigned active tickets
+      const myAssignedTickets = await prisma.ticket.count({
+        where: {
+          ownerId: user.id,
+          status: { notIn: [TicketStatus.CLOSED, TicketStatus.CANCELLED] },
+        },
+      });
+
+      // 3. Recent 5 queue updates
+      const recentTickets = await prisma.ticket.findMany({
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          ticketNumber: true,
+          summary: true,
+          status: true,
+          itPriority: true,
+          updatedAt: true,
+          owner: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        metrics: {
+          newTickets,
+          openTickets,
+          inProgressTickets,
+          waitingRequesterTickets,
+          myAssignedTickets,
+        },
+        recentQueueUpdates: recentTickets.map((t) => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          summary: t.summary,
+          status: t.status,
+          itPriority: t.itPriority,
+          owner: t.owner ? { id: t.owner.id, name: t.owner.name } : null,
+          updatedAt: t.updatedAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch staff dashboard" },
       });
     }
   }
