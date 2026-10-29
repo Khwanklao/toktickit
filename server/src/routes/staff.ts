@@ -399,19 +399,18 @@ staffRouter.patch(
       const ticketId = Number(idParam);
       if (isNaN(ticketId) || ticketId <= 0) {
         return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Ticket not found" },
+          error: { code: "NOT_FOUND", message: "Ticket not found", details: [] },
         });
       }
 
       const { status, expectedUpdatedAt } = req.body || {};
-      const user = (req as AuthenticatedRequest).user;
-      const isLab3Staff = user?.email === "staff.alex@toktickit.local" || user?.email === "staff.sarah@toktickit.local";
 
       if (!status || !Object.values(TicketStatus).includes(status as TicketStatus)) {
         return res.status(400).json({
           error: {
-            code: isLab3Staff ? "BAD_REQUEST" : "VALIDATION_ERROR",
+            code: "VALIDATION_ERROR",
             message: `Invalid status value: ${status}`,
+            details: [],
           },
         });
       }
@@ -423,15 +422,16 @@ staffRouter.patch(
 
       if (!existingTicket) {
         return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Ticket not found" },
+          error: { code: "NOT_FOUND", message: "Ticket not found", details: [] },
         });
       }
 
       if (!canTransition(existingTicket.status, status as TicketStatus)) {
         return res.status(400).json({
           error: {
-            code: isLab3Staff ? "BAD_REQUEST" : "VALIDATION_ERROR",
+            code: "VALIDATION_ERROR",
             message: `Invalid status transition from ${existingTicket.status} to ${status}`,
+            details: [],
           },
         });
       }
@@ -444,6 +444,7 @@ staffRouter.patch(
               error: {
                 code: "STALE_UPDATE",
                 message: "Ticket has been modified by another transaction.",
+                details: [],
               },
             });
           }
@@ -453,7 +454,7 @@ staffRouter.patch(
               error: {
                 code: "VALIDATION_ERROR",
                 message: err.message,
-                details: err.errors,
+                details: err.errors || [],
               },
             });
           }
@@ -473,6 +474,7 @@ staffRouter.patch(
             error: {
               code: "RESOLUTION_ACTION_REQUIRED",
               message: "Transition to RESOLVED requires at least one qualifying Action Taken.",
+              details: [],
             },
           });
         }
@@ -523,6 +525,7 @@ staffRouter.patch(
           error: {
             code: "STALE_UPDATE",
             message: "Ticket has been modified by another transaction.",
+            details: [],
           },
         });
       }
@@ -530,6 +533,7 @@ staffRouter.patch(
         error: {
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to update ticket status",
+          details: [],
         },
       });
     }
