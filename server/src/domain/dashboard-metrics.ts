@@ -21,6 +21,24 @@ export interface RequesterMetrics {
   closedTickets: number;
 }
 
+export const ACTIVE_STATUSES: TicketStatus[] = [
+  TicketStatus.NEW,
+  TicketStatus.OPEN,
+  TicketStatus.IN_PROGRESS,
+  TicketStatus.WAITING_FOR_REQUESTER,
+  TicketStatus.REOPENED,
+];
+
+export const OPEN_GROUP_STATUSES: TicketStatus[] = [
+  TicketStatus.OPEN,
+  TicketStatus.REOPENED,
+];
+
+export const TERMINAL_STATUSES: TicketStatus[] = [
+  TicketStatus.CLOSED,
+  TicketStatus.CANCELLED,
+];
+
 /**
  * UNIT-06 / BR-14: Staff Operational Metrics
  * - newTickets: status == 'NEW'
@@ -42,10 +60,7 @@ export function calculateStaffMetrics(
   for (const t of tickets) {
     if (t.status === TicketStatus.NEW) {
       newTickets++;
-    } else if (
-      t.status === TicketStatus.OPEN ||
-      t.status === TicketStatus.REOPENED
-    ) {
+    } else if (OPEN_GROUP_STATUSES.includes(t.status)) {
       openTickets++;
     }
 
@@ -59,8 +74,7 @@ export function calculateStaffMetrics(
 
     if (
       t.ownerId === currentUserId &&
-      t.status !== TicketStatus.CLOSED &&
-      t.status !== TicketStatus.CANCELLED
+      !TERMINAL_STATUSES.includes(t.status)
     ) {
       myAssignedTickets++;
     }
@@ -90,13 +104,7 @@ export function calculateRequesterMetrics(
   let resolvedTickets = 0;
   let closedTickets = 0;
 
-  const activeStatuses = new Set<TicketStatus>([
-    TicketStatus.NEW,
-    TicketStatus.OPEN,
-    TicketStatus.IN_PROGRESS,
-    TicketStatus.WAITING_FOR_REQUESTER,
-    TicketStatus.REOPENED,
-  ]);
+  const activeStatuses = new Set<TicketStatus>(ACTIVE_STATUSES);
 
   for (const t of tickets) {
     if (activeStatuses.has(t.status)) {

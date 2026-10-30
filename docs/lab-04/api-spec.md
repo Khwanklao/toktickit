@@ -132,7 +132,7 @@
 **Errors:** 400 `VALIDATION_ERROR`, `INVALID_ACTION_DATE`, `TICKET_TERMINAL`; 401; 403 `FORBIDDEN`; 404 `NOT_FOUND` (ticket or action); 409 `STALE_UPDATE`.
 
 ### 2.4 `DELETE /api/tickets/:id/actions/:actionId` (and `/actions`)
-**Access:** all roles. Always rejected.
+**Access:** all roles. Always rejected. Unauthenticated requests receive 401 UNAUTHORIZED; authenticated users of any role receive 405 METHOD_NOT_ALLOWED.
 
 **Response 405**
 ```json
