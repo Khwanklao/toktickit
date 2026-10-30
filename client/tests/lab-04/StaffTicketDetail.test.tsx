@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { StaffTicketDetail } from "../../src/components/StaffTicketDetail.js";
 import { apiClient } from "../../src/lib/apiClient.js";
@@ -109,7 +109,7 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       // Edited tag because updatedAt > createdAt
       expect(screen.getByText(/Edited/i)).toBeInTheDocument();
       // Performer name and role badge
-      expect(screen.getByText("Sarah Staff")).toBeInTheDocument();
+      expect(within(panel).getByText("Sarah Staff")).toBeInTheDocument();
       // Formatted date/time (Asia/Bangkok: Oct 19, 2026, 3:30 PM for 08:30:00 UTC)
       expect(screen.getByText(/Oct 19, 2026/i)).toBeInTheDocument();
     });
@@ -228,11 +228,15 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       const statusSelect = screen.getByTestId("status-dropdown");
 
       // Select RESOLVED
-      fireEvent.change(statusSelect, { target: { value: "RESOLVED" } });
+      await act(async () => {
+        fireEvent.change(statusSelect, { target: { value: "RESOLVED" } });
+      });
 
       // Confirmation modal appears for RESOLVED
       const confirmBtn = await screen.findByTestId("confirm-status-btn");
-      fireEvent.click(confirmBtn);
+      await act(async () => {
+        fireEvent.click(confirmBtn);
+      });
 
       // Inline banner should appear
       const errorBanner = await screen.findByTestId("resolution-required-banner");
@@ -246,7 +250,7 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       fireEvent.click(recordBtn);
 
       expect(await screen.findByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByText("Record Action Taken")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Record Action Taken" })).toBeInTheDocument();
     });
   });
 
@@ -340,7 +344,9 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       await screen.findByText("Server connectivity outage");
       const statusSelect = screen.getByTestId("status-dropdown");
 
-      fireEvent.change(statusSelect, { target: { value: "WAITING_FOR_REQUESTER" } });
+      await act(async () => {
+        fireEvent.change(statusSelect, { target: { value: "WAITING_FOR_REQUESTER" } });
+      });
 
       // WAITING_FOR_REQUESTER does not require confirmation dialog (only RESOLVED, CLOSED, CANCELLED)
       // Expect apiClient.patch called with expectedUpdatedAt: baseTicket.updatedAt
@@ -362,7 +368,9 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
 
       // Click Reload Latest
       const reloadBtn = screen.getByTestId("reload-latest-btn");
-      fireEvent.click(reloadBtn);
+      await act(async () => {
+        fireEvent.click(reloadBtn);
+      });
 
       expect(apiClient.get).toHaveBeenCalledWith("/api/tickets/101");
     });
