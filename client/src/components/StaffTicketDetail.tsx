@@ -6,7 +6,7 @@ import { PriorityBadge } from "./PriorityBadge.js";
 import { RoleBadge } from "./RoleBadge.js";
 import { useAuth } from "../context/AuthContext.js";
 import { formatBangkokDateTime } from "../utils/date.js";
-import { ActionTakenModal, ActionTakenData } from "./ActionTakenModal.js";
+import { ActionTakenModal, ActionTakenItem } from "./ActionTakenModal.js";
 
 interface CommentItem {
   id: string;
@@ -117,7 +117,7 @@ export const StaffTicketDetail: React.FC = () => {
 
   // Action Taken Modal State
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
-  const [editingAction, setEditingAction] = useState<ActionTakenData | null>(null);
+  const [editingAction, setEditingAction] = useState<ActionTakenItem | null>(null);
 
   const fetchTicketData = useCallback(async () => {
     if (!id) return;
