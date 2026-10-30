@@ -51,7 +51,8 @@ describe("ActionTakenModal Component Tests (UI-01, UI-05, UI-06, UI-11)", () => 
       fireEvent.change(resultInput, { target: { value: "done" } });
 
       expect(saveBtn).toBeDisabled();
-      expect(screen.getByText(/5 to 2,000 characters/i)).toBeInTheDocument();
+      expect(screen.getByText("Description must be between 5 and 2,000 characters.")).toBeInTheDocument();
+      expect(screen.getByText("Result must be between 5 and 2,000 characters.")).toBeInTheDocument();
     });
 
     it("requires Follow-up Note when Follow-up checkbox is checked", async () => {

@@ -14,7 +14,7 @@ interface AuthContextType {
   loading: boolean;
   setUser: (user: User | null) => void;
   fetchUser: () => Promise<User | null>;
-  login: (credentials: { email: string; password: string }) => Promise<User>;
+  login?: (credentials: { email: string; password: string }) => Promise<User>;
   logout: () => Promise<void>;
 }
 
