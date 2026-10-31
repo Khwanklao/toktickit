@@ -92,3 +92,31 @@ Thank you for the thorough review on PR #47 (Issue 4: Staff Ticket Workspace & A
 4. **Backend Contract & Traceability:** Explained the separation of concerns between backend (PR #45) and frontend (PR #47). Reconciled `docs/lab-04/tests.md` with new rows `UI-17`, `UI-18`, and `UI-19` to provide full requirement-to-test traceability (`47b134c`).
 
 The branch is ready for your re-review and approval on https://github.com/Khwanklao/toktickit/pull/47.
+
+---
+
+## Issue 5 Peer Review Feedback & Resolution Matrix
+
+- **Reviewer:** Pun
+- **Pull Request:** {{ใส่ลิงก์ PR Issue 5 ของคุณที่นี่}}
+- **Approval Status:** Pending: Changes requested, awaiting re-review
+
+| Item # | Category | Review Feedback / Issue | Resolution & Changes Made | Resolution Commit | Status |
+|---|---|---|---|---|---|
+| 1 | Must fix | **Preserve old data during refresh failure & concurrency safety:** When a refetch fails in `StaffDashboard`, keep existing metrics and Recent Queue Updates on screen and show a safe warning alert banner instead of rendering an empty screen. Initial failure still shows error state with Retry. On 401 redirect to `/login`; on 403 show Access Restricted and clear cached data. Prevent out-of-order responses from overwriting newer data; prevent starting a second refresh while one is pending. | In `StaffDashboard.tsx`, added distinct `refreshError` state. When refresh fails after initial load, existing data is preserved on screen while displaying an `alert-warning` banner (`role="alert"`) stating refresh failed and data may be out of date. On 401 redirect to `/login` immediately; on 403 clear cached data (`setData(null)`) and display Access Restricted screen. Added `isRefreshingRef` and disabled Refresh button during refresh to prevent concurrent requests. Added `latestRequestId` counter to discard stale out-of-order responses. Added test suite `UI-24` in `StaffDashboard.test.tsx`. | `155a568`, `1235e57` | Resolved |
+| 2 | Must fix | **Clear `focusSearch` signal after navigation:** In `StaffTicketQueue`, clear the search focus signal (from `location.state` or `focus=search` query parameter) after focusing the input, so returning to the queue does not steal focus back to the search input. Clearing must use `setSearchParams(next, { replace: true })` preserving all other params, use `navigate` replace to clear state, not trigger extra `GET /api/staff/queue` requests, and be React StrictMode safe. | In `StaffTicketQueue.tsx`, added `focusHandledRef` and single-execution `useEffect` focusing the search input once. Cleared `focus` query parameter using `setSearchParams(next, { replace: true })` preserving all filter query parameters (`group`, `status`, etc.), and cleared `location.state.focusSearch` via `navigate(..., { replace: true, state: null })`. Guarded against re-focusing on subsequent filter changes. Removed `tickets.length` from `fetchQueue` dependencies to eliminate redundant fetches. Added test suite `UI-26` in `StaffTicketQueue.test.tsx`. | `155a568`, `1e265a1` | Resolved |
+| 3 | Must verify | **Validate real filter behavior for `group=open` and `focus=search`:** Verify that `StaffTicketQueue` really accepts `group=open`, displays the removable chip `"Open tickets"`, and removing the chip refetches without `group`. Verify end-to-end cross-component drill-down integration from `StaffDashboard` quick action and metric cards to `StaffTicketQueue`. | Verified runtime integration in `StaffTicketQueue.tsx` where `group=open` is parsed from URL, passed to `/api/staff/queue?group=open`, and rendered as `chip-group-open` labeled `"Open tickets"`. Removing the chip deletes `group` from URL and triggers refetch. Added integration test suite `UI-25` in `StaffDashboard.test.tsx` covering navigation from Open card to Queue, chip appearance, removal refetch, drill-downs for all metric cards, and Quick Action search focus navigation. | `155a568`, `1235e57`, `1e265a1` | Resolved |
+
+### Review Sign-off to Pun
+
+Dear Pun,
+
+Thank you for the detailed review feedback on branch `feature/issue-5-staff-dashboard-ui` for Issue 5 (Staff Dashboard UI). All 3 review items have been addressed and verified with strict TDD (Red, Green, Refactor):
+
+1. **Dashboard Data Preservation & Refresh Error Handling (Item 1):** When a refresh fails after data has been loaded, existing metric counts and the Recent Queue Updates table remain visible on screen. A dismissible warning banner (`role="alert"`) informs the user that the refresh failed and data may be out of date, with a retry button. 401 redirects to `/login` and 403 displays Access Restricted while clearing cached data. Concurrent refreshes are blocked via `isRefreshingRef` and disabled button state. A `latestRequestId` counter discards stale responses from delayed requests (`155a568`, `1235e57`).
+2. **Search Focus Signal Clearing (Item 2):** `StaffTicketQueue` consumes `focus=search` from URL parameters or `location.state.focusSearch`, sets input focus once, and clears the signal using `setSearchParams(..., { replace: true })` and `navigate(..., { replace: true, state: null })` without triggering extra API requests or stealing focus on subsequent user filter interactions (`155a568`, `1e265a1`).
+3. **Cross-Component Drill-down & Filter Integration (Item 3):** Confirmed runtime integration where `group=open` and all metric filters are parsed, sent to the API, and rendered as removable filter chips. Verified via test suite `UI-25` alongside `UI-16` (`155a568`, `1235e57`, `1e265a1`).
+
+All 162 client tests pass (100%), TypeScript compiles with 0 errors, and zero regressions were introduced.
+
+The branch is ready for your re-review and approval on {{ใส่ลิงก์ PR Issue 5 ของคุณที่นี่}}.
