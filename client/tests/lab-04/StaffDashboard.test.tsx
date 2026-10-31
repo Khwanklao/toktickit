@@ -511,5 +511,266 @@ describe("StaffDashboard Component & Integration Tests (Lab 4 / Issue 5)", () =>
       expect(document.activeElement).toBe(searchInput);
     });
   });
+
+  describe("UI-24: Refresh Error Handling, Data Preservation & Request Sequencing", () => {
+    it("keeps existing data and displays warning banner when refresh fails after successful load", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <StaffDashboard />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      });
+
+      // Next refresh fails
+      (apiClient.get as any).mockRejectedValueOnce(new Error("Network disconnect"));
+
+      const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+
+      // Warning banner states that refresh failed and data may be out of date
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/failed to refresh/i);
+      expect(alert).toHaveTextContent(/data shown may be out of date/i);
+
+      // Data is PRESERVED on screen
+      expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      expect(screen.getByTestId("metric-card-open")).toHaveTextContent("23");
+      expect(screen.getByTestId("recent-update-row-101")).toBeInTheDocument();
+
+      // Refresh button is re-enabled and spinner is removed
+      expect(refreshBtn).not.toBeDisabled();
+      expect(screen.queryByText("Refreshing...")).not.toBeInTheDocument();
+    });
+
+    it("removes refresh error banner upon subsequent successful refresh", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <StaffDashboard />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      });
+
+      // Refresh 1 fails
+      (apiClient.get as any).mockRejectedValueOnce(new Error("500 Internal Server Error"));
+      const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+
+      // Refresh 2 succeeds with updated data
+      const updatedData = {
+        metrics: { ...mockDashboardData.metrics, newTickets: 99 },
+        recentQueueUpdates: mockDashboardData.recentQueueUpdates,
+      };
+      (apiClient.get as any).mockResolvedValueOnce(updatedData);
+
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("99");
+      });
+
+      // Banner is removed
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("refresh returning 401 redirects to /login immediately", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <Routes>
+            <Route path="/staff/dashboard" element={<StaffDashboard />} />
+            <Route path="/login" element={<div data-testid="login-screen">Login Screen</div>} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      });
+
+      // Refresh returns 401
+      (apiClient.get as any).mockRejectedValueOnce({ status: 401, response: { status: 401 } });
+      const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-screen")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("metric-card-new")).not.toBeInTheDocument();
+    });
+
+    it("refresh returning 403 shows Access Restricted and clears cached data", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <StaffDashboard />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      });
+
+      // Refresh returns 403
+      (apiClient.get as any).mockRejectedValueOnce({ status: 403, response: { status: 403 } });
+      const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("access-restricted-screen")).toBeInTheDocument();
+      });
+      // Cached data must NOT be rendered
+      expect(screen.queryByTestId("metric-card-new")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("recent-update-row-101")).not.toBeInTheDocument();
+    });
+
+    it("ignores out-of-order refresh responses so older response does not overwrite newer data", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <StaffDashboard />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
+      });
+
+      let resolveSlow: any;
+      const slowPromise = new Promise((resolve) => {
+        resolveSlow = resolve;
+      });
+
+      // First refresh is slow
+      (apiClient.get as any).mockImplementationOnce(() => slowPromise);
+      const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
+      fireEvent.click(refreshBtn);
+
+      // Second refresh resolves fast with 50 tickets
+      const fastData = {
+        metrics: { ...mockDashboardData.metrics, newTickets: 50 },
+        recentQueueUpdates: mockDashboardData.recentQueueUpdates,
+      };
+      (apiClient.get as any).mockResolvedValueOnce(fastData);
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("50");
+      });
+
+      // Now slow response finishes with older data (e.g. 5 tickets)
+      const slowData = {
+        metrics: { ...mockDashboardData.metrics, newTickets: 5 },
+        recentQueueUpdates: mockDashboardData.recentQueueUpdates,
+      };
+      resolveSlow(slowData);
+
+      // Metric must REMAIN 50, not overwritten by slowData (5)
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByTestId("metric-card-new")).toHaveTextContent("50");
+    });
+  });
+
+  describe("UI-25: Cross-Component Drill-down & Filter Integration", () => {
+    it("navigating from Open card applies group=open, renders chip, and removing chip refetches without group", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <Routes>
+            <Route path="/staff/dashboard" element={<StaffDashboard />} />
+            <Route path="/staff/queue" element={<StaffTicketQueue />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-open")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId("metric-card-open"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("chip-group-open")).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("chip-group-open")).toHaveTextContent("Open tickets");
+
+      // Verify API was called with group=open
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("group=open"));
+
+      // Click remove on chip
+      const removeBtn = screen.getByRole("button", { name: /Remove filter: Open tickets/i });
+      fireEvent.click(removeBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("chip-group-open")).not.toBeInTheDocument();
+      });
+    });
+
+    it("verifies drill-down destinations for all other metric cards", async () => {
+      const renderAppAtDashboard = () =>
+        render(
+          <MemoryRouter initialEntries={["/staff/dashboard"]}>
+            <Routes>
+              <Route path="/staff/dashboard" element={<StaffDashboard />} />
+              <Route path="/staff/queue" element={<StaffTicketQueue />} />
+            </Routes>
+          </MemoryRouter>
+        );
+
+      // 1. New Card
+      const view1 = renderAppAtDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("metric-card-new"));
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("status=NEW"));
+      });
+      view1.unmount();
+
+      // 2. In Progress Card
+      const view2 = renderAppAtDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-in-progress")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("metric-card-in-progress"));
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("status=IN_PROGRESS"));
+      });
+      view2.unmount();
+
+      // 3. Waiting for Requester Card
+      const view3 = renderAppAtDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-waiting-requester")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("metric-card-waiting-requester"));
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("status=WAITING_FOR_REQUESTER"));
+      });
+      view3.unmount();
+
+      // 4. My Assigned Card
+      const view4 = renderAppAtDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-my-assigned")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("metric-card-my-assigned"));
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("ownerId=me"));
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining("activeOnly=true"));
+      });
+      view4.unmount();
+    });
+  });
 });
 

@@ -138,4 +138,84 @@ describe("UI-16: Staff Ticket Queue URL Filters & Removable Chips", () => {
       expect(lastCall).not.toContain("status=IN_PROGRESS");
     });
   });
+
+  describe("UI-26: Search Focus Signal Consumption and Clearing", () => {
+    it("focuses search input when focus=search query param is present and removes focus from URL without extra queue fetch", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/queue?focus=search&group=open"]}>
+          <Routes>
+            <Route path="/staff/queue" element={<StaffTicketQueue />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
+
+      // Verify chip-group-open is preserved
+      expect(screen.getByTestId("chip-group-open")).toBeInTheDocument();
+
+      // Verify signal is cleared from URL (focus is not in search parameters anymore)
+      await waitFor(() => {
+        const calls = (apiClient.get as any).mock.calls.filter((c: any) => c[0].includes("/api/staff/queue"));
+        // Exactly 1 fetch was made for loading the queue, no duplicate fetch for focus clearing
+        expect(calls.length).toBe(1);
+      });
+    });
+
+    it("focuses search input when location.state has focusSearch and clears state via navigate replace", async () => {
+      render(
+        <MemoryRouter initialEntries={[{ pathname: "/staff/queue", state: { focusSearch: true } }]}>
+          <Routes>
+            <Route path="/staff/queue" element={<StaffTicketQueue />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
+
+      // Exactly 1 fetch was made
+      await waitFor(() => {
+        const calls = (apiClient.get as any).mock.calls.filter((c: any) => c[0].includes("/api/staff/queue"));
+        expect(calls.length).toBe(1);
+      });
+    });
+
+    it("does not refocus search input on subsequent filter interactions once signal is cleared", async () => {
+      render(
+        <MemoryRouter initialEntries={["/staff/queue?focus=search"]}>
+          <Routes>
+            <Route path="/staff/queue" element={<StaffTicketQueue />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
+
+      // Blur the search input
+      searchInput.blur();
+      expect(document.activeElement).not.toBe(searchInput);
+
+      // Trigger a filter change (e.g. priority select)
+      const prioritySelect = screen.getByTestId("filter-priority");
+      fireEvent.change(prioritySelect, { target: { value: "HIGH" } });
+
+      // Focus should NOT be stolen back to search input
+      expect(document.activeElement).not.toBe(searchInput);
+    });
+  });
 });
