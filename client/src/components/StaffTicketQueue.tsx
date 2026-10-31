@@ -49,12 +49,32 @@ export const StaffTicketQueue: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusHandledRef = useRef(false);
 
   useEffect(() => {
-    if ((location.state as any)?.focusSearch || searchParams.get("focus") === "search") {
+    const hasStateSignal = Boolean((location.state as any)?.focusSearch);
+    const hasParamSignal = searchParams.get("focus") === "search";
+
+    if ((hasStateSignal || hasParamSignal) && !focusHandledRef.current) {
+      focusHandledRef.current = true;
       searchInputRef.current?.focus();
+
+      if (hasParamSignal) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("focus");
+        setSearchParams(next, { replace: true });
+      }
+
+      if (hasStateSignal) {
+        navigate(
+          { pathname: location.pathname, search: location.search },
+          { replace: true, state: null }
+        );
+      }
+    } else if (!hasStateSignal && !hasParamSignal) {
+      focusHandledRef.current = false;
     }
-  }, [location.state, searchParams]);
+  }, [location.state, location.pathname, location.search, searchParams, setSearchParams, navigate]);
 
   const urlStatus = searchParams.get("status") || "";
   const urlGroup = searchParams.get("group") || "";
@@ -96,8 +116,10 @@ export const StaffTicketQueue: React.FC = () => {
     return () => clearTimeout(handler);
   }, [search]);
 
+  const hasLoadedRef = useRef(false);
+
   const fetchQueue = useCallback(async () => {
-    if (tickets.length === 0) {
+    if (!hasLoadedRef.current) {
       setLoading(true);
     }
     setError(null);
@@ -137,6 +159,7 @@ export const StaffTicketQueue: React.FC = () => {
 
       setTickets(res.data);
       setPagination(res.pagination);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       if (err?.status === 403 || err?.response?.status === 403) {
         setIsForbidden(true);
@@ -159,7 +182,6 @@ export const StaffTicketQueue: React.FC = () => {
     urlActiveOnly,
     sortBy,
     sortOrder,
-    tickets.length,
   ]);
 
   // Reset page when filters change
