@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { apiClient } from "../lib/apiClient.js";
 import { StatusBadge } from "./StatusBadge.js";
 import { PriorityBadge } from "./PriorityBadge.js";
@@ -46,7 +46,15 @@ interface Category {
 export const StaffTicketQueue: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if ((location.state as any)?.focusSearch || searchParams.get("focus") === "search") {
+      searchInputRef.current?.focus();
+    }
+  }, [location.state, searchParams]);
 
   const urlStatus = searchParams.get("status") || "";
   const urlGroup = searchParams.get("group") || "";
@@ -340,6 +348,7 @@ export const StaffTicketQueue: React.FC = () => {
                 </svg>
               </span>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

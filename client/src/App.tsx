@@ -11,6 +11,7 @@ import { CreateTicket } from "./components/CreateTicket.js";
 import { TicketDetail } from "./components/TicketDetail.js";
 import { StaffTicketQueue } from "./components/StaffTicketQueue.js";
 import { StaffTicketDetail } from "./components/StaffTicketDetail.js";
+import { StaffDashboard } from "./components/StaffDashboard.js";
 import { UserManagement } from "./components/UserManagement.js";
 import { CheckSystem } from "./components/CheckSystem.js";
 import "./index.css";
@@ -76,6 +77,20 @@ export function AppRoutes() {
             </AppShell>
           </RouteGuard>
         }
+      />
+      <Route
+        path="/staff/dashboard"
+        element={
+          <RouteGuard allowedRoles={["IT_STAFF", "ADMINISTRATOR"]}>
+            <AppShell>
+              <StaffDashboard />
+            </AppShell>
+          </RouteGuard>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={<Navigate to="/staff/dashboard" replace />}
       />
       <Route
         path="/staff/queue"

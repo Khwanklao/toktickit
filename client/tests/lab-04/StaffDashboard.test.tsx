@@ -407,7 +407,12 @@ describe("StaffDashboard Component & Integration Tests (Lab 4 / Issue 5)", () =>
 
       fireEvent.click(refreshBtn);
 
-      expect(apiClient.get).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledTimes(2);
+      });
+      await waitFor(() => {
+        expect(refreshBtn).not.toBeDisabled();
+      });
     });
 
     it("metric cards carry descriptive aria-labels for screen readers", async () => {

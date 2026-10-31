@@ -9,6 +9,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isDashboardActive = location.pathname === "/staff/dashboard" || location.pathname === "/dashboard";
   const isMyTicketsActive = location.pathname === "/tickets";
   const isCreateTicketActive = location.pathname === "/tickets/new";
   const isQueueActive = location.pathname === "/staff/queue";
@@ -52,16 +53,17 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               {user.role === "ADMINISTRATOR" ? (
                 <>
                   <Link
-                    to="/admin/users"
-                    className={`nav-link text-white ${isUserMgmtActive ? "active fw-bold" : ""}`}
+                    to="/staff/dashboard"
+                    className={`nav-link text-white ${isDashboardActive ? "active fw-bold" : ""}`}
                     style={{
-                      backgroundColor: isUserMgmtActive ? "#153C30" : "transparent",
+                      backgroundColor: isDashboardActive ? "#153C30" : "transparent",
                       borderRadius: "4px",
                       padding: "6px 12px",
                     }}
-                    data-testid="nav-user-management"
+                    aria-current={isDashboardActive ? "page" : undefined}
+                    data-testid="nav-dashboard"
                   >
-                    User Management
+                    Dashboard
                   </Link>
                   <Link
                     to="/staff/queue"
@@ -71,24 +73,54 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       borderRadius: "4px",
                       padding: "6px 12px",
                     }}
-                    data-testid="nav-ticket-queue-audit"
+                    aria-current={isQueueActive ? "page" : undefined}
+                    data-testid="nav-ticket-queue"
                   >
-                    Ticket Queue (Audit)
+                    Ticket Queue
+                  </Link>
+                  <Link
+                    to="/admin/users"
+                    className={`nav-link text-white ${isUserMgmtActive ? "active fw-bold" : ""}`}
+                    style={{
+                      backgroundColor: isUserMgmtActive ? "#153C30" : "transparent",
+                      borderRadius: "4px",
+                      padding: "6px 12px",
+                    }}
+                    aria-current={isUserMgmtActive ? "page" : undefined}
+                    data-testid="nav-user-management"
+                  >
+                    User Management
                   </Link>
                 </>
               ) : user.role === "IT_STAFF" ? (
-                <Link
-                  to="/staff/queue"
-                  className={`nav-link text-white ${isQueueActive ? "active fw-bold" : ""}`}
-                  style={{
-                    backgroundColor: isQueueActive ? "#153C30" : "transparent",
-                    borderRadius: "4px",
-                    padding: "6px 12px",
-                  }}
-                  data-testid="nav-my-queue"
-                >
-                  My Queue
-                </Link>
+                <>
+                  <Link
+                    to="/staff/dashboard"
+                    className={`nav-link text-white ${isDashboardActive ? "active fw-bold" : ""}`}
+                    style={{
+                      backgroundColor: isDashboardActive ? "#153C30" : "transparent",
+                      borderRadius: "4px",
+                      padding: "6px 12px",
+                    }}
+                    aria-current={isDashboardActive ? "page" : undefined}
+                    data-testid="nav-dashboard"
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/staff/queue"
+                    className={`nav-link text-white ${isQueueActive ? "active fw-bold" : ""}`}
+                    style={{
+                      backgroundColor: isQueueActive ? "#153C30" : "transparent",
+                      borderRadius: "4px",
+                      padding: "6px 12px",
+                    }}
+                    aria-current={isQueueActive ? "page" : undefined}
+                    data-testid="nav-ticket-queue"
+                  >
+                    Ticket Queue
+                  </Link>
+                </>
               ) : (
                 <>
                   <Link
@@ -99,6 +131,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       borderRadius: "4px",
                       padding: "6px 12px",
                     }}
+                    aria-current={isMyTicketsActive ? "page" : undefined}
                     data-testid="nav-my-tickets"
                   >
                     My Tickets
@@ -111,6 +144,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       borderRadius: "4px",
                       padding: "6px 12px",
                     }}
+                    aria-current={isCreateTicketActive ? "page" : undefined}
                     data-testid="nav-create-ticket"
                   >
                     + Create Ticket
