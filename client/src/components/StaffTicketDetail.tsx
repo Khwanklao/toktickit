@@ -259,7 +259,10 @@ export const StaffTicketDetail: React.FC = () => {
       } else if (code === "STALE_UPDATE" || err?.status === 409 || err?.response?.status === 409) {
         setStaleError("This record was updated by another user. Reload to see the latest version before saving.");
       } else {
-        setOpError(err?.response?.data?.error?.message || err?.message || "Failed to change ticket status.");
+        setOpError(
+          err?.response?.data?.error?.message ||
+            (err?.response?.data?.error?.code ? "Failed to change ticket status." : "Something went wrong. Please try again.")
+        );
       }
     }
   };
@@ -332,7 +335,7 @@ export const StaffTicketDetail: React.FC = () => {
   );
 
   const allowedTargets = ALLOWED_TRANSITIONS[ticket.status] || [];
-  const statusOptions = Array.from(new Set([ticket.status, ...allowedTargets]));
+  const statusOptions = allowedTargets;
 
   return (
     <div className="container-fluid max-width-1200 py-4 px-3 px-md-4">
@@ -504,11 +507,14 @@ export const StaffTicketDetail: React.FC = () => {
             ) : (
               <select
                 disabled={isAdmin}
-                value={pendingStatus || ticket.status}
+                value={pendingStatus || ""}
                 onChange={(e) => handleStatusSelectChange(e.target.value)}
                 className="form-select form-select-sm"
                 data-testid="status-dropdown"
               >
+                <option value="" disabled hidden>
+                  Change status...
+                </option>
                 {statusOptions.map((st) => {
                   let label = STATUS_LABELS[st] || st;
                   if (st === "RESOLVED" && !canResolve) {

@@ -323,7 +323,7 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       await waitFor(() => {
         expect(screen.queryByTestId("status-confirm-modal")).not.toBeInTheDocument();
       });
-      expect(statusSelect).toHaveValue("IN_PROGRESS");
+      expect(statusSelect).toHaveValue("");
     });
 
     it("sends expectedUpdatedAt when confirming status change and displays 409 STALE_UPDATE banner with Reload Latest", async () => {
