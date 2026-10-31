@@ -55,26 +55,33 @@ export const StaffTicketQueue: React.FC = () => {
     const hasStateSignal = Boolean((location.state as any)?.focusSearch);
     const hasParamSignal = searchParams.get("focus") === "search";
 
-    if ((hasStateSignal || hasParamSignal) && !focusHandledRef.current) {
-      focusHandledRef.current = true;
-      searchInputRef.current?.focus();
-
-      if (hasParamSignal) {
-        const next = new URLSearchParams(searchParams);
-        next.delete("focus");
-        setSearchParams(next, { replace: true });
-      }
-
-      if (hasStateSignal) {
-        navigate(
-          { pathname: location.pathname, search: location.search },
-          { replace: true, state: null }
-        );
-      }
-    } else if (!hasStateSignal && !hasParamSignal) {
+    if (!hasStateSignal && !hasParamSignal) {
       focusHandledRef.current = false;
+      return;
     }
-  }, [location.state, location.pathname, location.search, searchParams, setSearchParams, navigate]);
+
+    if (focusHandledRef.current) {
+      return;
+    }
+
+    if (!searchInputRef.current) {
+      return;
+    }
+
+    searchInputRef.current.focus();
+    focusHandledRef.current = true;
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (hasParamSignal) {
+      nextParams.delete("focus");
+    }
+    const nextSearch = nextParams.toString() ? `?${nextParams.toString()}` : "";
+
+    navigate(
+      { pathname: location.pathname, search: nextSearch },
+      { replace: true, state: null }
+    );
+  }, [location.state, location.pathname, searchParams, navigate]);
 
   const urlStatus = searchParams.get("status") || "";
   const urlGroup = searchParams.get("group") || "";
