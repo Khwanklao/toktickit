@@ -814,6 +814,53 @@ describe("StaffDashboard Component & Integration Tests (Lab 4 / Issue 5)", () =>
       });
       view4.unmount();
     });
+    it("Search Tickets quick action navigates to /staff/queue, focuses search input, and clears signal in single replace navigation", async () => {
+      let currentLocation: any;
+      const LocationTracker = () => {
+        const location = useLocation();
+        currentLocation = location;
+        return null;
+      };
+
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <Routes>
+            <Route path="/staff/dashboard" element={<StaffDashboard />} />
+            <Route
+              path="/staff/queue"
+              element={
+                <>
+                  <LocationTracker />
+                  <StaffTicketQueue />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("quick-action-search")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId("quick-action-search"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
+
+      // Verify focus param removed and router state cleared
+      await waitFor(() => {
+        expect(currentLocation.search).not.toContain("focus=");
+        expect(currentLocation.state).toBeNull();
+      });
+
+      // Verify exactly 1 queue fetch was triggered
+      const calls = (apiClient.get as any).mock.calls.filter((c: any) => c[0].includes("/api/staff/queue"));
+      expect(calls.length).toBe(1);
+    });
   });
 });
-

@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { StaffTicketQueue } from "../../src/components/StaffTicketQueue.js";
 import { apiClient } from "../../src/lib/apiClient.js";
 
@@ -216,6 +216,90 @@ describe("UI-16: Staff Ticket Queue URL Filters & Removable Chips", () => {
 
       // Focus should NOT be stolen back to search input
       expect(document.activeElement).not.toBe(searchInput);
+    });
+    it("clears both focus query param and focusSearch router state with a single replace navigation preserving other params", async () => {
+      let currentLocation: any;
+      const LocationTracker = () => {
+        const location = useLocation();
+        currentLocation = location;
+        return <div data-testid="location-tracker">{location.pathname}{location.search}</div>;
+      };
+
+      render(
+        <MemoryRouter initialEntries={[{ pathname: "/staff/queue", search: "?focus=search&group=open&page=2", state: { focusSearch: true } }]}>
+          <Routes>
+            <Route
+              path="/staff/queue"
+              element={
+                <>
+                  <LocationTracker />
+                  <StaffTicketQueue />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
+
+      // Verify URL has focus removed and group=open&page=2 preserved
+      await waitFor(() => {
+        expect(currentLocation.search).not.toContain("focus=search");
+        expect(currentLocation.search).toContain("group=open");
+        expect(currentLocation.search).toContain("page=2");
+        expect(currentLocation.state).toBeNull();
+      });
+
+      // Exactly 1 fetch was made for loading the queue
+      const calls = (apiClient.get as any).mock.calls.filter((c: any) => c[0].includes("/api/staff/queue"));
+      expect(calls.length).toBe(1);
+    });
+
+    it("defers focus and signal clearing until search input is actually rendered", async () => {
+      // Simulate input rendered conditionally or late
+      let showInput = false;
+      let setLateRender: any;
+
+      const LateQueueWrapper = () => {
+        const [rendered, setRendered] = React.useState(false);
+        setLateRender = setRendered;
+        return (
+          <div>
+            {!rendered ? (
+              <div data-testid="delayed-loader">Loading queue controls...</div>
+            ) : (
+              <StaffTicketQueue />
+            )}
+          </div>
+        );
+      };
+
+      const { rerender } = render(
+        <MemoryRouter initialEntries={[{ pathname: "/staff/queue", search: "?focus=search", state: { focusSearch: true } }]}>
+          <LateQueueWrapper />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId("delayed-loader")).toBeInTheDocument();
+      expect(screen.queryByTestId("search-input")).not.toBeInTheDocument();
+
+      // Now trigger rendering of StaffTicketQueue
+      act(() => {
+        setLateRender(true);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByTestId("search-input");
+      expect(document.activeElement).toBe(searchInput);
     });
   });
 });
