@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { apiClient } from "../lib/apiClient.js";
 import { StatusBadge } from "./StatusBadge.js";
 import { PriorityBadge } from "./PriorityBadge.js";
@@ -46,7 +46,42 @@ interface Category {
 export const StaffTicketQueue: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusHandledRef = useRef(false);
+
+  useEffect(() => {
+    const hasStateSignal = Boolean((location.state as any)?.focusSearch);
+    const hasParamSignal = searchParams.get("focus") === "search";
+
+    if (!hasStateSignal && !hasParamSignal) {
+      focusHandledRef.current = false;
+      return;
+    }
+
+    if (focusHandledRef.current) {
+      return;
+    }
+
+    if (!searchInputRef.current) {
+      return;
+    }
+
+    searchInputRef.current.focus();
+    focusHandledRef.current = true;
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (hasParamSignal) {
+      nextParams.delete("focus");
+    }
+    const nextSearch = nextParams.toString() ? `?${nextParams.toString()}` : "";
+
+    navigate(
+      { pathname: location.pathname, search: nextSearch },
+      { replace: true, state: null }
+    );
+  }, [location.state, location.pathname, searchParams, navigate]);
 
   const urlStatus = searchParams.get("status") || "";
   const urlGroup = searchParams.get("group") || "";
@@ -88,8 +123,10 @@ export const StaffTicketQueue: React.FC = () => {
     return () => clearTimeout(handler);
   }, [search]);
 
+  const hasLoadedRef = useRef(false);
+
   const fetchQueue = useCallback(async () => {
-    if (tickets.length === 0) {
+    if (!hasLoadedRef.current) {
       setLoading(true);
     }
     setError(null);
@@ -129,6 +166,7 @@ export const StaffTicketQueue: React.FC = () => {
 
       setTickets(res.data);
       setPagination(res.pagination);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       if (err?.status === 403 || err?.response?.status === 403) {
         setIsForbidden(true);
@@ -151,7 +189,6 @@ export const StaffTicketQueue: React.FC = () => {
     urlActiveOnly,
     sortBy,
     sortOrder,
-    tickets.length,
   ]);
 
   // Reset page when filters change
@@ -340,6 +377,7 @@ export const StaffTicketQueue: React.FC = () => {
                 </svg>
               </span>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
