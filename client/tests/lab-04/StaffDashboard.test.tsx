@@ -635,7 +635,7 @@ describe("StaffDashboard Component & Integration Tests (Lab 4 / Issue 5)", () =>
       expect(screen.queryByTestId("recent-update-row-101")).not.toBeInTheDocument();
     });
 
-    it("ignores out-of-order refresh responses so older response does not overwrite newer data", async () => {
+    it("prevents starting a second refresh while one is already pending", async () => {
       render(
         <MemoryRouter initialEntries={["/staff/dashboard"]}>
           <StaffDashboard />
@@ -646,36 +646,79 @@ describe("StaffDashboard Component & Integration Tests (Lab 4 / Issue 5)", () =>
         expect(screen.getByTestId("metric-card-new")).toHaveTextContent("14");
       });
 
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+
       let resolveSlow: any;
       const slowPromise = new Promise((resolve) => {
         resolveSlow = resolve;
       });
 
-      // First refresh is slow
       (apiClient.get as any).mockImplementationOnce(() => slowPromise);
       const refreshBtn = screen.getByTestId("refresh-dashboard-btn");
       fireEvent.click(refreshBtn);
 
-      // Second refresh resolves fast with 50 tickets
+      expect(refreshBtn).toBeDisabled();
+      expect(apiClient.get).toHaveBeenCalledTimes(2);
+
+      // Attempting second refresh while pending is ignored
+      fireEvent.click(refreshBtn);
+      expect(apiClient.get).toHaveBeenCalledTimes(2);
+
+      resolveSlow({
+        metrics: { ...mockDashboardData.metrics, newTickets: 20 },
+        recentQueueUpdates: mockDashboardData.recentQueueUpdates,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("metric-card-new")).toHaveTextContent("20");
+      });
+      expect(refreshBtn).not.toBeDisabled();
+    });
+
+    it("ignores out-of-order responses so older response does not overwrite newer data", async () => {
+      // 1. Initial load fails
+      (apiClient.get as any).mockRejectedValueOnce(new Error("Initial load failure"));
+
+      render(
+        <MemoryRouter initialEntries={["/staff/dashboard"]}>
+          <StaffDashboard />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+
+      // 2. Click Retry (request 2), but request 2 is slow
+      let resolveSlow: any;
+      const slowPromise = new Promise((resolve) => {
+        resolveSlow = resolve;
+      });
+      (apiClient.get as any).mockImplementationOnce(() => slowPromise);
+
+      const retryBtn = screen.getByRole("button", { name: /retry/i });
+      fireEvent.click(retryBtn);
+
+      // 3. User clicks Retry again and request 3 resolves fast with 50 tickets
       const fastData = {
         metrics: { ...mockDashboardData.metrics, newTickets: 50 },
         recentQueueUpdates: mockDashboardData.recentQueueUpdates,
       };
       (apiClient.get as any).mockResolvedValueOnce(fastData);
-      fireEvent.click(refreshBtn);
+      fireEvent.click(retryBtn);
 
       await waitFor(() => {
         expect(screen.getByTestId("metric-card-new")).toHaveTextContent("50");
       });
 
-      // Now slow response finishes with older data (e.g. 5 tickets)
-      const slowData = {
-        metrics: { ...mockDashboardData.metrics, newTickets: 5 },
+      // 4. Now older request 2 resolves late with stale data (10)
+      const staleData = {
+        metrics: { ...mockDashboardData.metrics, newTickets: 10 },
         recentQueueUpdates: mockDashboardData.recentQueueUpdates,
       };
-      resolveSlow(slowData);
+      resolveSlow(staleData);
 
-      // Metric must REMAIN 50, not overwritten by slowData (5)
+      // Value must remain 50, not overwritten by staleData (10)
       await new Promise((r) => setTimeout(r, 50));
       expect(screen.getByTestId("metric-card-new")).toHaveTextContent("50");
     });

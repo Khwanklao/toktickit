@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.js";
 import { apiClient } from "../lib/apiClient.js";
@@ -34,36 +34,67 @@ export const StaffDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   const [data, setData] = useState<StaffDashboardData | null>(null);
+  const dataRef = useRef<StaffDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isForbidden, setIsForbidden] = useState(false);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const latestRequestId = useRef(0);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
+    if (isRefresh && (isRefreshingRef.current || refreshing)) {
+      return;
+    }
+
+    const currentRequestId = ++latestRequestId.current;
+
     if (isRefresh) {
       setRefreshing(true);
+      isRefreshingRef.current = true;
     } else {
       setLoading(true);
     }
-    setError(null);
-    setIsForbidden(false);
-    setIsUnauthorized(false);
 
     try {
       const res = await apiClient.get<StaffDashboardData>("/api/staff/dashboard");
+      if (currentRequestId !== latestRequestId.current) {
+        return;
+      }
       setData(res);
+      dataRef.current = res;
+      setError(null);
+      setRefreshError(null);
+      setIsForbidden(false);
+      setIsUnauthorized(false);
     } catch (err: any) {
+      if (currentRequestId !== latestRequestId.current) {
+        return;
+      }
+
       if (err?.status === 403 || err?.response?.status === 403) {
+        setData(null);
+        dataRef.current = null;
         setIsForbidden(true);
       } else if (err?.status === 401 || err?.response?.status === 401) {
+        setData(null);
+        dataRef.current = null;
         setIsUnauthorized(true);
       } else {
-        setError("Something went wrong. Please try again.");
+        if (isRefresh || dataRef.current !== null) {
+          setRefreshError("Failed to refresh dashboard. The data shown may be out of date.");
+        } else {
+          setError("Something went wrong. Please try again.");
+        }
       }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (currentRequestId === latestRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+        isRefreshingRef.current = false;
+      }
     }
   }, []);
 
@@ -98,7 +129,7 @@ export const StaffDashboard: React.FC = () => {
   }
 
   // Loading skeleton state
-  if (loading && !data) {
+  if (loading && !data && !error) {
     return (
       <div className="container-fluid max-width-1200 py-4 px-3 px-md-4" data-testid="dashboard-loading" aria-busy="true">
         <span role="status" className="visually-hidden">Loading dashboard...</span>
@@ -196,8 +227,26 @@ export const StaffDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Error Alert Banner */}
-      {error && (
+      {/* Refresh Warning Alert Banner */}
+      {refreshError && (
+        <div
+          role="alert"
+          className="alert alert-warning d-flex align-items-center justify-content-between mb-4 p-3 rounded-3 shadow-sm"
+        >
+          <span>{refreshError}</span>
+          <button
+            type="button"
+            onClick={() => fetchDashboard(true)}
+            disabled={refreshing}
+            className="btn btn-sm btn-outline-warning ms-3 px-3 py-1 text-dark"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Initial Error Alert Banner */}
+      {error && !data && (
         <div
           role="alert"
           className="alert alert-danger d-flex align-items-center justify-content-between mb-4 p-3 rounded-3 shadow-sm"
