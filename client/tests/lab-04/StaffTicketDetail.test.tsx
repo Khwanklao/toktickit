@@ -292,7 +292,7 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       await screen.findByText("Server connectivity outage");
       const options = screen.getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
 
-      expect(options).toContain("IN_PROGRESS"); // Current status
+      expect(options).not.toContain("IN_PROGRESS"); // Same-status is never offered
       expect(options).toContain("WAITING_FOR_REQUESTER");
       expect(options).toContain("RESOLVED");
       expect(options).toContain("CANCELLED");
@@ -373,6 +373,232 @@ describe("Staff Ticket Detail Workflow & Actions Taken Tests (UI-07, UI-08, UI-0
       });
 
       expect(apiClient.get).toHaveBeenCalledWith("/api/tickets/101");
+    });
+  });
+
+  // UI-17: Parametrized BR-10 Transition Matrix across all 64 status pairs
+  describe("UI-17: Parametrized BR-10 Transition Matrix across all 64 status pairs", () => {
+    const ALL_STATUSES = [
+      "NEW",
+      "OPEN",
+      "IN_PROGRESS",
+      "WAITING_FOR_REQUESTER",
+      "RESOLVED",
+      "CLOSED",
+      "REOPENED",
+      "CANCELLED",
+    ] as const;
+
+    const EXPECTED_TRANSITIONS: Record<string, string[]> = {
+      NEW: ["OPEN", "CANCELLED"],
+      OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
+      IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+      WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+      RESOLVED: ["CLOSED", "REOPENED"],
+      REOPENED: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+      CLOSED: [],
+      CANCELLED: [],
+    };
+
+    ALL_STATUSES.forEach((fromStatus) => {
+      describe(`When ticket status is ${fromStatus}`, () => {
+        if (fromStatus === "CLOSED" || fromStatus === "CANCELLED") {
+          it(`shows disabled 'Final status' control with no transition options`, async () => {
+            (apiClient.get as any).mockImplementation((url: string) => {
+              if (url === "/api/tickets/101") return Promise.resolve({ ...baseTicket, status: fromStatus });
+              if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [] });
+              return Promise.resolve({ comments: [], notes: [] });
+            });
+
+            renderComponent();
+            await screen.findByText("Server connectivity outage");
+            const select = screen.getByTestId("status-dropdown") as HTMLSelectElement;
+            expect(select).toBeDisabled();
+            expect(select.textContent).toContain("Final status");
+            // No target transitions offered
+            ALL_STATUSES.forEach((targetStatus) => {
+              const option = Array.from(select.querySelectorAll("option")).find((o) => o.value === targetStatus);
+              // Option if present must only be the final status label option, not a selectable transition
+              if (option) {
+                expect(option.textContent).toContain("Final status");
+              }
+            });
+          });
+        } else {
+          ALL_STATUSES.forEach((targetStatus) => {
+            const isPermitted = EXPECTED_TRANSITIONS[fromStatus].includes(targetStatus);
+
+            it(`correctly ${isPermitted ? "offers" : "does NOT offer"} target transition to ${targetStatus} (same-status never offered)`, async () => {
+              (apiClient.get as any).mockImplementation((url: string) => {
+                if (url === "/api/tickets/101") return Promise.resolve({ ...baseTicket, status: fromStatus });
+                if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [] });
+                return Promise.resolve({ comments: [], notes: [] });
+              });
+
+              renderComponent();
+              await screen.findByText("Server connectivity outage");
+              const select = screen.getByTestId("status-dropdown") as HTMLSelectElement;
+
+              const offeredOptions = Array.from(select.querySelectorAll("option"))
+                .map((o) => o.value)
+                .filter((val) => val !== "");
+
+              if (targetStatus === fromStatus) {
+                // Same-status is NEVER offered
+                expect(offeredOptions).not.toContain(targetStatus);
+              } else if (isPermitted) {
+                expect(offeredOptions).toContain(targetStatus);
+              } else {
+                expect(offeredOptions).not.toContain(targetStatus);
+              }
+            });
+          });
+        }
+      });
+    });
+  });
+
+  // UI-18: Comprehensive Resolution Gate edge conditions (BR-12)
+  describe("UI-18: Comprehensive Resolution Gate Edge Conditions (BR-12)", () => {
+    const reopenedTicket = {
+      ...baseTicket,
+      status: "IN_PROGRESS",
+      reopenedAt: "2026-10-19T09:00:00.000Z",
+    };
+
+    it("shows resolution hint when ticket has 0 actions", async () => {
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve({ ...baseTicket, status: "IN_PROGRESS", reopenedAt: null });
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /Resolved/i });
+      expect(option).toHaveTextContent("Resolved (Record an Action Taken first)");
+      expect(option).not.toBeDisabled();
+    });
+
+    it("hides resolution hint when ticket has 1 action and reopenedAt is null", async () => {
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve({ ...baseTicket, status: "IN_PROGRESS", reopenedAt: null });
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [sampleAction] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /^Resolved$/i });
+      expect(option).toBeInTheDocument();
+      expect(option).not.toHaveTextContent("Record an Action Taken first");
+    });
+
+    it("shows resolution hint when ticket was reopened and only has older actions (createdAt < reopenedAt)", async () => {
+      const olderAction = {
+        ...sampleAction,
+        createdAt: "2026-10-19T08:35:00.000Z", // before reopenedAt (09:00)
+      };
+
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve(reopenedTicket);
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [olderAction] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /Resolved/i });
+      expect(option).toHaveTextContent("Resolved (Record an Action Taken first)");
+    });
+
+    it("shows resolution hint when action createdAt strictly equals reopenedAt (rule is strictly greater)", async () => {
+      const exactTimeAction = {
+        ...sampleAction,
+        createdAt: "2026-10-19T09:00:00.000Z", // exact equal to reopenedAt
+      };
+
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve(reopenedTicket);
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [exactTimeAction] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /Resolved/i });
+      expect(option).toHaveTextContent("Resolved (Record an Action Taken first)");
+    });
+
+    it("shows resolution hint when actionDateTime is after reopenedAt but createdAt is before reopenedAt", async () => {
+      const backdatedAction = {
+        ...sampleAction,
+        actionDateTime: "2026-10-19T09:30:00.000Z", // after reopenedAt
+        createdAt: "2026-10-19T08:45:00.000Z", // before reopenedAt
+      };
+
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve(reopenedTicket);
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [backdatedAction] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /Resolved/i });
+      expect(option).toHaveTextContent("Resolved (Record an Action Taken first)");
+    });
+
+    it("hides resolution hint when an action is logged by an Administrator after reopenedAt", async () => {
+      const adminAction = {
+        ...sampleAction,
+        performedById: "admin-1",
+        performedBy: { id: "admin-1", name: "Admin Adam", role: "ADMINISTRATOR" },
+        createdAt: "2026-10-19T09:15:00.000Z", // strictly after reopenedAt
+      };
+
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve(reopenedTicket);
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [adminAction] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const option = screen.getByRole("option", { name: /^Resolved$/i });
+      expect(option).toBeInTheDocument();
+      expect(option).not.toHaveTextContent("Record an Action Taken first");
+    });
+  });
+
+  // UI-19: Hardened Status Error Handling
+  describe("UI-19: Hardened Status Error Handling (BR-10, BR-12, Section 6)", () => {
+    it("never disables RESOLVED option even when canResolve is false", async () => {
+      (apiClient.get as any).mockImplementation((url: string) => {
+        if (url === "/api/tickets/101") return Promise.resolve(baseTicket);
+        if (url === "/api/tickets/101/actions") return Promise.resolve({ actions: [] });
+        return Promise.resolve({ comments: [], notes: [] });
+      });
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const resolvedOption = screen.getByRole("option", { name: /Resolved/i });
+      expect(resolvedOption).not.toBeDisabled();
+    });
+
+    it("displays safe generic error banner on unknown or malformed error shapes", async () => {
+      (apiClient.patch as any).mockRejectedValueOnce(new Error("Network failed"));
+
+      renderComponent();
+      await screen.findByText("Server connectivity outage");
+      const statusSelect = screen.getByTestId("status-dropdown");
+
+      await act(async () => {
+        fireEvent.change(statusSelect, { target: { value: "WAITING_FOR_REQUESTER" } });
+      });
+
+      const errBanner = await screen.findByTestId("op-error-banner");
+      expect(errBanner).toHaveTextContent("Something went wrong. Please try again.");
     });
   });
 });
