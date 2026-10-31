@@ -91,7 +91,7 @@ export const Login: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const loggedInUser = await login({ email: email.trim(), password });
+      const loggedInUser = await login!({ email: email.trim(), password });
       const target = getRedirectPath(loggedInUser);
       navigate(target, { replace: true });
     } catch (err: any) {
