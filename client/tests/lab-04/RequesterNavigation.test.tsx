@@ -71,7 +71,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -92,7 +93,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -113,7 +115,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -134,7 +137,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -156,7 +160,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: mockLogin,
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       let testLocation: any;
@@ -211,7 +216,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -248,7 +254,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(
@@ -272,7 +279,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       const { unmount } = render(
@@ -294,7 +302,8 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
         loading: false,
         login: vi.fn(),
         logout: vi.fn(),
-        checkSession: vi.fn(),
+        setUser: vi.fn(),
+      fetchUser: vi.fn(),
       });
 
       render(

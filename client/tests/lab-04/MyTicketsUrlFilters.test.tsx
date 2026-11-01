@@ -93,7 +93,8 @@ describe("MyTickets URL Filters & Chips (Lab 4 / Issue 6)", () => {
       loading: false,
       login: vi.fn(),
       logout: vi.fn(),
-      checkSession: vi.fn(),
+      setUser: vi.fn(),
+      fetchUser: vi.fn(),
     });
 
     (apiClient.get as any).mockImplementation((url: string) => {
