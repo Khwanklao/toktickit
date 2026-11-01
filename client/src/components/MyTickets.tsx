@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient } from "../lib/apiClient.js";
 import { Category } from "../api.js";
 import { StatusBadge } from "./StatusBadge.js";
@@ -27,8 +27,20 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "New",
+  ASSIGNED: "Assigned",
+  IN_PROGRESS: "In Progress",
+  WAITING_FOR_REQUESTER: "Waiting for Requester",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+};
+
 export const MyTickets: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlGroup = searchParams.get("group") || "";
+  const urlStatus = searchParams.get("status") || "";
 
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -45,7 +57,7 @@ export const MyTickets: React.FC = () => {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [priority, setPriority] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const statusFilter = urlStatus;
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
@@ -73,7 +85,11 @@ export const MyTickets: React.FC = () => {
       if (search.trim()) params.append("search", search.trim());
       if (categoryId) params.append("categoryId", categoryId);
       if (priority) params.append("priority", priority);
-      if (statusFilter) params.append("status", statusFilter);
+      if (urlGroup === "open" && !statusFilter) {
+        params.append("group", "open");
+      } else if (statusFilter) {
+        params.append("status", statusFilter);
+      }
       if (sortBy) params.append("sortBy", sortBy);
       if (sortDir) params.append("sortDir", sortDir);
       params.append("page", String(page));
@@ -100,23 +116,56 @@ export const MyTickets: React.FC = () => {
       const msg = err instanceof Error ? err.message : "Unable to connect to TokTickIT API";
       setErrorMessage(msg);
     }
-  }, [search, categoryId, priority, statusFilter, sortBy, sortDir, page, pageSize]);
+  }, [search, categoryId, priority, statusFilter, urlGroup, sortBy, sortDir, page, pageSize]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
 
   const hasSearchOrFilters =
-    search.trim().length > 0 || categoryId !== "" || priority !== "" || statusFilter !== "";
+    search.trim().length > 0 ||
+    categoryId !== "" ||
+    priority !== "" ||
+    statusFilter !== "" ||
+    urlGroup !== "";
+
+  const activeChips: { id: string; label: string; testId: string; onRemove: () => void }[] = [];
+
+  if (urlGroup === "open") {
+    activeChips.push({
+      id: "group-open",
+      label: "Open tickets",
+      testId: "chip-group-open",
+      onRemove: () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete("group");
+        setSearchParams(next);
+      },
+    });
+  }
+
+  if (urlStatus) {
+    const statusLabel = STATUS_LABELS[urlStatus] || urlStatus;
+    activeChips.push({
+      id: `status-${urlStatus}`,
+      label: statusLabel,
+      testId: `chip-status-${urlStatus}`,
+      onRemove: () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete("status");
+        setSearchParams(next);
+      },
+    });
+  }
 
   const handleClearFilters = () => {
     setSearch("");
     setCategoryId("");
     setPriority("");
-    setStatusFilter("");
     setSortBy("createdAt");
     setSortDir("desc");
     setPage(1);
+    setSearchParams(new URLSearchParams());
   };
 
   const handleSortHeaderClick = (field: string) => {
@@ -163,7 +212,7 @@ export const MyTickets: React.FC = () => {
         search={search}
         categoryId={categoryId}
         priority={priority}
-        status={statusFilter}
+        status={statusFilter || urlStatus}
         sortBy={sortBy}
         sortDir={sortDir}
         onSearchChange={(val) => {
@@ -179,8 +228,15 @@ export const MyTickets: React.FC = () => {
           setPage(1);
         }}
         onStatusChange={(val) => {
-          setStatusFilter(val);
           setPage(1);
+          const next = new URLSearchParams(searchParams);
+          next.delete("group");
+          if (val) {
+            next.set("status", val);
+          } else {
+            next.delete("status");
+          }
+          setSearchParams(next);
         }}
         onSortByChange={(val) => {
           setSortBy(val);
@@ -192,6 +248,40 @@ export const MyTickets: React.FC = () => {
         }}
         onClearFilters={handleClearFilters}
       />
+
+      {/* Filter Chips Container */}
+      {activeChips.length > 0 && (
+        <div className="d-flex align-items-center justify-content-between flex-wrap pt-2 pb-2 mb-3" data-testid="filter-chips-container">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <span className="small text-muted fw-semibold">Active filters:</span>
+            {activeChips.map((chip) => (
+              <span
+                key={chip.id}
+                className="badge rounded-pill bg-light text-dark border d-inline-flex align-items-center gap-2 py-1 px-3 shadow-xs"
+                data-testid={chip.testId}
+              >
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  className="btn-close btn-close-sm"
+                  style={{ fontSize: "0.65rem" }}
+                  aria-label={`Remove filter: ${chip.label}`}
+                  onClick={chip.onRemove}
+                />
+              </span>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-link text-decoration-none p-0 fw-medium"
+            style={{ color: "#1B4D3E" }}
+            data-testid="clear-filters-btn"
+            onClick={handleClearFilters}
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
 
       {/* API Failure State */}
       {status === "error" && (
