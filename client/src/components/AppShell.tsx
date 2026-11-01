@@ -124,6 +124,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               ) : (
                 <>
                   <Link
+                    to="/dashboard"
+                    className={`nav-link text-white ${isDashboardActive ? "active fw-bold" : ""}`}
+                    style={{
+                      backgroundColor: isDashboardActive ? "#153C30" : "transparent",
+                      borderRadius: "4px",
+                      padding: "6px 12px",
+                    }}
+                    aria-current={isDashboardActive ? "page" : undefined}
+                    data-testid="nav-dashboard"
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
                     to="/tickets"
                     className={`nav-link text-white ${isMyTicketsActive ? "active fw-bold" : ""}`}
                     style={{

@@ -40,7 +40,10 @@ export const Login: React.FC = () => {
       return (fromPath && (fromPath.startsWith("/staff") || fromPath.startsWith("/tickets/"))) ? fromPath : "/staff/queue";
     }
     if (u.role === "REQUESTER") {
-      return (fromPath && fromPath.startsWith("/tickets")) ? fromPath : "/tickets";
+      if (fromPath && (fromPath.startsWith("/tickets") || fromPath === "/dashboard" || fromPath.startsWith("/dashboard/"))) {
+        return fromPath;
+      }
+      return "/tickets";
     }
     
     return getRoleHomePath(u.role);

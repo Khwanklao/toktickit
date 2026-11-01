@@ -102,7 +102,7 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId("staff-dashboard-container")).toBeInTheDocument();
+        expect(screen.getByText("Welcome back, Sarah Staff!")).toBeInTheDocument();
       });
       expect(screen.queryByTestId("requester-dashboard")).not.toBeInTheDocument();
     });
@@ -123,7 +123,7 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId("staff-dashboard-container")).toBeInTheDocument();
+        expect(screen.getByText("Welcome back, Adam Admin!")).toBeInTheDocument();
       });
       expect(screen.queryByTestId("requester-dashboard")).not.toBeInTheDocument();
     });
@@ -144,12 +144,13 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId("login-screen")).toBeInTheDocument();
+        expect(screen.getByTestId("login-submit-button")).toBeInTheDocument();
       });
+      expect(screen.getByText("Sign in to TokTickIT")).toBeInTheDocument();
     });
 
     it("extends Login getRedirectPath so Requester returning from /dashboard is navigated to /dashboard", async () => {
-      const mockLogin = vi.fn().mockResolvedValue({ user: mockRequesterUser });
+      const mockLogin = vi.fn().mockResolvedValue(mockRequesterUser);
       vi.spyOn(AuthContextModule, "useAuth").mockReturnValue({
         user: null,
         loading: false,
@@ -191,7 +192,7 @@ describe("Requester Navigation & Routing (Lab 4 / Issue 6)", () => {
       fireEvent.change(screen.getByLabelText(/email/i), {
         target: { value: "jane.requester@toktickit.local" },
       });
-      fireEvent.change(screen.getByLabelText(/password/i), {
+      fireEvent.change(screen.getByLabelText(/^password$/i), {
         target: { value: "password123" },
       });
 
