@@ -3,7 +3,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { Role } from "@prisma/client";
+import { Role, TicketStatus } from "@prisma/client";
+import { validateActionInput, validateActionDate, isStale, ValidationError, ACTIVE_STATUSES } from "../domain/index.js";
 import { getPrisma } from "../prisma.js";
 import { generateTicketNumber } from "../utils/ticket-number.js";
 import { authenticateUser, requireRole, authenticateRequester, AuthenticatedRequest } from "../utils/auth.js";
@@ -159,7 +160,46 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
       requesterId,
     };
 
-    const { search, categoryId, priority, status, sortBy, sortDir, page, pageSize } = req.query;
+    const { search, categoryId, priority, status, group, sortBy, sortDir, page, pageSize } = req.query;
+
+    // Validate group and status combination (Sec 5.2 / AC-14)
+    if (group !== undefined && status !== undefined) {
+      return res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Cannot provide both 'group' and 'status' filters simultaneously.",
+        },
+      });
+    }
+
+    if (group !== undefined) {
+      if (group !== "open") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Group filter supports only the value 'open'.",
+          },
+        });
+      }
+      where.status = {
+        in: ACTIVE_STATUSES,
+      };
+    }
+
+    if (status !== undefined && status !== "") {
+      if (!Object.values(TicketStatus).includes(status as TicketStatus)) {
+        if (priority === undefined) {
+          return res.status(400).json({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: `Invalid status parameter: ${status}`,
+            },
+          });
+        }
+      } else {
+        where.status = status as TicketStatus;
+      }
+    }
 
     if (typeof search === "string") {
       const trimmedSearch = search.trim();
@@ -180,10 +220,6 @@ ticketsRouter.get("/", authenticateUser, requireRole(Role.REQUESTER), async (req
 
     if (typeof priority === "string" && VALID_PRIORITIES.includes(priority)) {
       where.requestedPriority = priority;
-    }
-
-    if (typeof status === "string" && VALID_STATUSES.includes(status)) {
-      where.status = status;
     }
 
     const effectiveSortBy = typeof sortBy === "string" && VALID_SORT_FIELDS.includes(sortBy) ? sortBy : "createdAt";
@@ -275,6 +311,7 @@ ticketsRouter.get("/:id", authenticateUser, async (req: Request, res: Response) 
         itPriority: true,
         status: true,
         isRequesterResolved: true,
+        reopenedAt: true,
         createdAt: true,
         updatedAt: true,
         requester: {
@@ -525,10 +562,25 @@ ticketsRouter.patch(
         });
       }
 
+      // Check terminal status (BR-11)
+      if (existingTicket.status === TicketStatus.CLOSED || existingTicket.status === TicketStatus.CANCELLED) {
+        return res.status(400).json({
+          error: {
+            code: "TICKET_TERMINAL",
+            message: "Cannot indicate resolution on a closed or cancelled ticket.",
+            details: [],
+          },
+        });
+      }
+
+      const now = new Date();
       const updatedTicket = await prisma.$transaction(async (tx) => {
         const ticket = await tx.ticket.update({
           where: { id: ticketId },
-          data: { isRequesterResolved: true },
+          data: {
+            isRequesterResolved: true,
+            updatedAt: now,
+          },
         });
 
         await tx.publicComment.create({
@@ -548,6 +600,7 @@ ticketsRouter.patch(
           id: updatedTicket.id,
           status: updatedTicket.status,
           isRequesterResolved: updatedTicket.isRequesterResolved,
+          updatedAt: updatedTicket.updatedAt.toISOString(),
         },
       });
     } catch (error) {
@@ -843,3 +896,527 @@ ticketsRouter.post(
   }
 );
 
+
+// ---------------------------------------------------------------------------
+// Actions Taken API Endpoints (Lab 4 / Sprint 4)
+// ---------------------------------------------------------------------------
+
+// DELETE /api/tickets/:id/actions and /:id/actions/:actionId (BR-07, AC-20)
+ticketsRouter.delete("/:id/actions", authenticateUser, (_req: Request, res: Response) => {
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Actions Taken records are append-only and cannot be deleted.",
+      details: [],
+    },
+  });
+});
+
+ticketsRouter.delete("/:id/actions/:actionId", authenticateUser, (_req: Request, res: Response) => {
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Actions Taken records are append-only and cannot be deleted.",
+      details: [],
+    },
+  });
+});
+
+// GET /api/tickets/:id/actions
+ticketsRouter.get("/:id/actions", authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Not authenticated." },
+      });
+    }
+
+    const ticketId = Number(req.params.id);
+    if (isNaN(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
+      });
+    }
+
+    // Requester only for own tickets (other ticket -> 404 NOT_FOUND)
+    if (user.role === Role.REQUESTER && ticket.requesterId !== user.id) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
+      });
+    }
+
+    const actions = await prisma.actionTaken.findMany({
+      where: { ticketId },
+      orderBy: [
+        { actionDateTime: "desc" },
+        { createdAt: "desc" },
+      ],
+      include: {
+        performedBy: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    return res.status(200).json({
+      ticketId,
+      actions: actions.map((a) => ({
+        id: a.id,
+        ticketId: a.ticketId,
+        actionDateTime: a.actionDateTime.toISOString(),
+        description: a.description,
+        result: a.result,
+        performedBy: {
+          id: a.performedBy.id,
+          name: a.performedBy.name,
+          role: a.performedBy.role,
+        },
+        followUpRequired: a.followUpRequired,
+        followUpNote: a.followUpNote,
+        attachmentNotes: a.attachmentNotes,
+        createdAt: a.createdAt.toISOString(),
+        updatedAt: a.updatedAt.toISOString(),
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to retrieve actions taken.", details: [] },
+    });
+  }
+});
+
+// POST /api/tickets/:id/actions
+ticketsRouter.post(
+  "/:id/actions",
+  authenticateUser,
+  requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({
+          error: { code: "UNAUTHORIZED", message: "Not authenticated.", details: [] },
+        });
+      }
+
+      const ticketId = Number(req.params.id);
+      if (isNaN(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
+        });
+      }
+
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Ticket not found.", details: [] },
+        });
+      }
+
+      // Terminal ticket check (BR-06)
+      if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.CANCELLED) {
+        return res.status(400).json({
+          error: {
+            code: "TICKET_TERMINAL",
+            message: "Cannot create actions on a closed or cancelled ticket.",
+            details: [],
+          },
+        });
+      }
+
+      const {
+        actionDateTime,
+        description,
+        result,
+        followUpRequired,
+        followUpNote,
+        attachmentNotes,
+      } = req.body || {};
+
+      if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "followUpRequired must be a boolean.",
+            details: [
+              {
+                field: "followUpRequired",
+                code: "VALIDATION_ERROR",
+                message: "followUpRequired must be a boolean.",
+              },
+            ],
+          },
+        });
+      }
+
+      // Validate action input (BR-03, BR-04)
+      const inputValidation = validateActionInput({
+        description,
+        result,
+        followUpRequired,
+        followUpNote,
+        attachmentNotes,
+      });
+
+      if (!inputValidation.ok) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Action input validation failed.",
+            details: inputValidation.errors,
+          },
+        });
+      }
+
+      // Validate action date (BR-05)
+      const actionDateToUse = actionDateTime !== undefined && actionDateTime !== null ? new Date(actionDateTime) : new Date();
+      const dateValidation = validateActionDate(actionDateToUse, ticket.createdAt);
+      if (!dateValidation.ok) {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_ACTION_DATE",
+            message: "Action date/time validation failed.",
+            details: dateValidation.errors,
+          },
+        });
+      }
+
+      const now = new Date();
+      const { newAction, updatedTicket } = await prisma.$transaction(async (tx) => {
+        const action = await tx.actionTaken.create({
+          data: {
+            ticketId,
+            actionDateTime: actionDateToUse,
+            description: typeof description === "string" ? description.trim() : description,
+            result: typeof result === "string" ? result.trim() : result,
+            performedById: user.id,
+            followUpRequired: Boolean(followUpRequired),
+            followUpNote: followUpRequired && typeof followUpNote === "string" ? followUpNote.trim() : (followUpRequired ? followUpNote : null),
+            attachmentNotes: attachmentNotes && typeof attachmentNotes === "string" ? attachmentNotes.trim() : null,
+          },
+          include: {
+            performedBy: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        });
+
+        const touchedTicket = await tx.ticket.update({
+          where: { id: ticketId },
+          data: { updatedAt: now },
+        });
+
+        return { newAction: action, updatedTicket: touchedTicket };
+      });
+
+      return res.status(201).json({
+        action: {
+          id: newAction.id,
+          ticketId: newAction.ticketId,
+          actionDateTime: newAction.actionDateTime.toISOString(),
+          description: newAction.description,
+          result: newAction.result,
+          performedBy: {
+            id: newAction.performedBy.id,
+            name: newAction.performedBy.name,
+            role: newAction.performedBy.role,
+          },
+          followUpRequired: newAction.followUpRequired,
+          followUpNote: newAction.followUpNote,
+          attachmentNotes: newAction.attachmentNotes,
+          createdAt: newAction.createdAt.toISOString(),
+          updatedAt: newAction.updatedAt.toISOString(),
+        },
+        ticketUpdatedAt: updatedTicket.updatedAt.toISOString(),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create action taken.", details: [] },
+      });
+    }
+  }
+);
+
+// PATCH /api/tickets/:id/actions/:actionId
+ticketsRouter.patch(
+  "/:id/actions/:actionId",
+  authenticateUser,
+  requireRole(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({
+          error: { code: "UNAUTHORIZED", message: "Not authenticated.", details: [] },
+        });
+      }
+
+      const ticketId = Number(req.params.id);
+      const actionId = req.params.actionId;
+      if (isNaN(ticketId) || ticketId <= 0 || !actionId) {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Resource not found.", details: [] },
+        });
+      }
+
+      const {
+        expectedUpdatedAt,
+        actionDateTime,
+        description,
+        result,
+        followUpRequired,
+        followUpNote,
+        attachmentNotes,
+      } = req.body || {};
+
+      // 1. Validate expectedUpdatedAt first (Item 2)
+      if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+        if (typeof expectedUpdatedAt !== "string" || isNaN(new Date(expectedUpdatedAt).getTime())) {
+          return res.status(400).json({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Invalid date format for expectedUpdatedAt.",
+              details: [
+                {
+                  field: "expectedUpdatedAt",
+                  code: "VALIDATION_ERROR",
+                  message: "Invalid date format for expectedUpdatedAt.",
+                },
+              ],
+            },
+          });
+        }
+      }
+
+      // Validate followUpRequired strictly as boolean if provided (Item 5)
+      if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "followUpRequired must be a boolean.",
+            details: [
+              {
+                field: "followUpRequired",
+                code: "VALIDATION_ERROR",
+                message: "followUpRequired must be a boolean.",
+              },
+            ],
+          },
+        });
+      }
+
+      const prisma = getPrisma();
+
+      // 2. Atomic transaction (Item 2)
+      const { updatedAction, touchedTicket } = await prisma.$transaction(async (tx) => {
+        // Confirm ticket exists
+        const ticket = await tx.ticket.findUnique({
+          where: { id: ticketId },
+        });
+
+        if (!ticket) {
+          const err: any = new Error("TICKET_NOT_FOUND");
+          err.code = "TICKET_NOT_FOUND";
+          throw err;
+        }
+
+        // Reject terminal ticket (BR-06)
+        if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.CANCELLED) {
+          const err: any = new Error("TICKET_TERMINAL");
+          err.code = "TICKET_TERMINAL";
+          throw err;
+        }
+
+        // Confirm action exists
+        const existingAction = await tx.actionTaken.findFirst({
+          where: { id: actionId, ticketId },
+        });
+
+        if (!existingAction) {
+          const err: any = new Error("ACTION_NOT_FOUND");
+          err.code = "ACTION_NOT_FOUND";
+          throw err;
+        }
+
+        // Concurrency check (BR-16): Check stale token before input validation
+        if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+          if (isStale(expectedUpdatedAt, existingAction.updatedAt)) {
+            const err: any = new Error("STALE_UPDATE");
+            err.code = "STALE_UPDATE";
+            throw err;
+          }
+        }
+
+        // Merge values
+        const mergedDescription = description !== undefined ? description : existingAction.description;
+        const mergedResult = result !== undefined ? result : existingAction.result;
+        const mergedFollowUpRequired = followUpRequired !== undefined ? followUpRequired : existingAction.followUpRequired;
+        const mergedFollowUpNote = followUpNote !== undefined ? followUpNote : existingAction.followUpNote;
+        const mergedAttachmentNotes = attachmentNotes !== undefined ? attachmentNotes : existingAction.attachmentNotes;
+
+        // Validate merged inputs
+        const inputValidation = validateActionInput({
+          description: mergedDescription,
+          result: mergedResult,
+          followUpRequired: mergedFollowUpRequired,
+          followUpNote: mergedFollowUpNote,
+          attachmentNotes: mergedAttachmentNotes,
+        });
+
+        if (!inputValidation.ok) {
+          const err: any = new Error("VALIDATION_ERROR");
+          err.code = "VALIDATION_ERROR";
+          err.details = inputValidation.errors;
+          throw err;
+        }
+
+        let actionDateToUse = existingAction.actionDateTime;
+        if (actionDateTime !== undefined && actionDateTime !== null) {
+          actionDateToUse = new Date(actionDateTime);
+          const dateValidation = validateActionDate(actionDateToUse, ticket.createdAt);
+          if (!dateValidation.ok) {
+            const err: any = new Error("INVALID_ACTION_DATE");
+            err.code = "INVALID_ACTION_DATE";
+            err.details = dateValidation.errors;
+            throw err;
+          }
+        }
+
+        // Atomic update with conditional expectedUpdatedAt if token sent
+        const whereClause: any = { id: actionId, ticketId };
+        if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+          whereClause.updatedAt = new Date(expectedUpdatedAt);
+        }
+
+        const updateResult = await tx.actionTaken.updateMany({
+          where: whereClause,
+          data: {
+            actionDateTime: actionDateToUse,
+            description: typeof mergedDescription === "string" ? mergedDescription.trim() : mergedDescription,
+            result: typeof mergedResult === "string" ? mergedResult.trim() : mergedResult,
+            followUpRequired: mergedFollowUpRequired,
+            followUpNote: mergedFollowUpRequired && typeof mergedFollowUpNote === "string" ? mergedFollowUpNote.trim() : (mergedFollowUpRequired ? mergedFollowUpNote : null),
+            attachmentNotes: mergedAttachmentNotes ? (typeof mergedAttachmentNotes === "string" ? mergedAttachmentNotes.trim() : mergedAttachmentNotes) : null,
+          },
+        });
+
+        if (updateResult.count === 0) {
+          const err: any = new Error("STALE_UPDATE");
+          err.code = "STALE_UPDATE";
+          throw err;
+        }
+
+        // Re-read action in same transaction
+        const reReadAction = await tx.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        });
+
+        const touchedTicket = await tx.ticket.update({
+          where: { id: ticketId },
+          data: { updatedAt: new Date() },
+        });
+
+        return { updatedAction: reReadAction!, touchedTicket };
+      });
+
+      return res.status(200).json({
+        action: {
+          id: updatedAction.id,
+          ticketId: updatedAction.ticketId,
+          actionDateTime: updatedAction.actionDateTime.toISOString(),
+          description: updatedAction.description,
+          result: updatedAction.result,
+          performedBy: {
+            id: updatedAction.performedBy.id,
+            name: updatedAction.performedBy.name,
+            role: updatedAction.performedBy.role,
+          },
+          followUpRequired: updatedAction.followUpRequired,
+          followUpNote: updatedAction.followUpNote,
+          attachmentNotes: updatedAction.attachmentNotes,
+          createdAt: updatedAction.createdAt.toISOString(),
+          updatedAt: updatedAction.updatedAt.toISOString(),
+        },
+        ticketUpdatedAt: touchedTicket.updatedAt.toISOString(),
+      });
+    } catch (error: any) {
+      if (error?.code === "TICKET_NOT_FOUND" || error?.code === "ACTION_NOT_FOUND") {
+        return res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Resource not found.", details: [] },
+        });
+      }
+      if (error?.code === "TICKET_TERMINAL") {
+        return res.status(400).json({
+          error: {
+            code: "TICKET_TERMINAL",
+            message: "Cannot modify actions on a closed or cancelled ticket.",
+            details: [],
+          },
+        });
+      }
+      if (error?.code === "VALIDATION_ERROR") {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Action input validation failed.",
+            details: error.details || [],
+          },
+        });
+      }
+      if (error?.code === "INVALID_ACTION_DATE") {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_ACTION_DATE",
+            message: "Action date/time validation failed.",
+            details: error.details || [],
+          },
+        });
+      }
+      if (error?.code === "STALE_UPDATE") {
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "Action has been modified by another user.",
+            details: [],
+          },
+        });
+      }
+      return res.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to update action taken.", details: [] },
+      });
+    }
+  }
+);

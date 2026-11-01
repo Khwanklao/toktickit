@@ -51,6 +51,7 @@ model User {
   internalNotes      InternalNote[]
   uploadedAttachments Attachment[]   @relation("UploadedAttachments")
   removedAttachments  Attachment[]   @relation("RemovedAttachments")
+  actionsTaken        ActionTaken[]
 
   @@index([email])
   @@index([role])
@@ -99,11 +100,13 @@ model Ticket {
   itPriority          Priority?       @default(LOW)
   status              TicketStatus    @default(NEW)
   isRequesterResolved Boolean         @default(false)
+  reopenedAt          DateTime?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   attachments         Attachment[]
   publicComments      PublicComment[]
   internalNotes       InternalNote[]
+  actionsTaken        ActionTaken[]
 
   @@index([requesterId])
   @@index([ownerId])
@@ -152,4 +155,23 @@ model InternalNote {
   createdAt DateTime @default(now())
 
   @@index([ticketId])
+}
+
+model ActionTaken {
+  id               String    @id @default(uuid())
+  ticketId         Int
+  ticket           Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actionDateTime   DateTime  @default(now())
+  description      String    @db.Text
+  result           String    @db.Text
+  performedById    String
+  performedBy      User      @relation(fields: [performedById], references: [id])
+  followUpRequired Boolean   @default(false)
+  followUpNote     String?   @db.Text
+  attachmentNotes  String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([ticketId, actionDateTime])
+  @@index([performedById])
 }

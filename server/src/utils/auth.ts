@@ -26,6 +26,7 @@ export async function authenticateUser(req: AuthenticatedRequest, res: Response,
       error: {
         code: "UNAUTHORIZED",
         message: "Not authenticated.",
+        details: [],
       },
     });
     return;
@@ -44,6 +45,7 @@ export async function authenticateUser(req: AuthenticatedRequest, res: Response,
       error: {
         code: "UNAUTHORIZED",
         message: "Not authenticated.",
+        details: [],
       },
     });
     return;
@@ -82,6 +84,7 @@ export function requireRole(...allowedRoles: Role[]) {
         error: {
           code: "UNAUTHORIZED",
           message: "Not authenticated.",
+        details: [],
         },
       });
     }
@@ -91,6 +94,7 @@ export function requireRole(...allowedRoles: Role[]) {
         error: {
           code: "FORBIDDEN",
           message: "Forbidden resource.",
+          details: [],
         },
       });
     }

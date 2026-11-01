@@ -52,6 +52,8 @@ npm --prefix server run prisma:seed
 
 The seed script is safe to run repeatedly.
 
+> **Warning / Operational Note:** Running the seed script (`npm --prefix server run prisma:seed` or `npm run prisma:seed`) performs idempotent upserts on demo tickets `TKT-2026-000101` through `TKT-2026-000109`. This overwrites their `summary`, `description`, `requestedPriority`, `itPriority`, `status`, `isRequesterResolved`, `reopenedAt`, `ownerId`, and `updatedAt` to restore a deterministic demo state.
+
 **Seed Accounts** (for local development only):
 
 | Role | Email | Status |

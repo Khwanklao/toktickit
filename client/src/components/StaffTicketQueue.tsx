@@ -1,9 +1,20 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { apiClient } from "../lib/apiClient.js";
 import { StatusBadge } from "./StatusBadge.js";
 import { PriorityBadge } from "./PriorityBadge.js";
 import { useAuth } from "../context/AuthContext.js";
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "New",
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  WAITING_FOR_REQUESTER: "Waiting for Requester",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+  REOPENED: "Reopened",
+  CANCELLED: "Cancelled",
+};
 
 interface QueueTicket {
   id: number;
@@ -34,7 +45,48 @@ interface Category {
 
 export const StaffTicketQueue: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusHandledRef = useRef(false);
+
+  useEffect(() => {
+    const hasStateSignal = Boolean((location.state as any)?.focusSearch);
+    const hasParamSignal = searchParams.get("focus") === "search";
+
+    if (!hasStateSignal && !hasParamSignal) {
+      focusHandledRef.current = false;
+      return;
+    }
+
+    if (focusHandledRef.current) {
+      return;
+    }
+
+    if (!searchInputRef.current) {
+      return;
+    }
+
+    searchInputRef.current.focus();
+    focusHandledRef.current = true;
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (hasParamSignal) {
+      nextParams.delete("focus");
+    }
+    const nextSearch = nextParams.toString() ? `?${nextParams.toString()}` : "";
+
+    navigate(
+      { pathname: location.pathname, search: nextSearch },
+      { replace: true, state: null }
+    );
+  }, [location.state, location.pathname, searchParams, navigate]);
+
+  const urlStatus = searchParams.get("status") || "";
+  const urlGroup = searchParams.get("group") || "";
+  const urlOwnerId = searchParams.get("ownerId") || "";
+  const urlActiveOnly = searchParams.get("activeOnly") || "";
 
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
@@ -71,8 +123,10 @@ export const StaffTicketQueue: React.FC = () => {
     return () => clearTimeout(handler);
   }, [search]);
 
+  const hasLoadedRef = useRef(false);
+
   const fetchQueue = useCallback(async () => {
-    if (tickets.length === 0) {
+    if (!hasLoadedRef.current) {
       setLoading(true);
     }
     setError(null);
@@ -85,12 +139,21 @@ export const StaffTicketQueue: React.FC = () => {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (selectedCategory) params.set("categoryId", selectedCategory);
       if (selectedPriority) params.set("itPriority", selectedPriority);
-      if (selectedStatus) params.set("status", selectedStatus);
 
-      if (selectedOwner === "me" && user) {
-        params.set("ownerId", user.id);
-      } else if (selectedOwner) {
-        params.set("ownerId", selectedOwner);
+      if (urlGroup) {
+        params.set("group", urlGroup);
+      } else {
+        const activeStatus = urlStatus || selectedStatus;
+        if (activeStatus) params.set("status", activeStatus);
+      }
+
+      if (urlActiveOnly) {
+        params.set("activeOnly", urlActiveOnly);
+      }
+
+      const activeOwner = urlOwnerId || selectedOwner;
+      if (activeOwner) {
+        params.set("ownerId", activeOwner);
       }
 
       params.set("sortBy", sortBy);
@@ -103,6 +166,7 @@ export const StaffTicketQueue: React.FC = () => {
 
       setTickets(res.data);
       setPagination(res.pagination);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       if (err?.status === 403 || err?.response?.status === 403) {
         setIsForbidden(true);
@@ -119,16 +183,18 @@ export const StaffTicketQueue: React.FC = () => {
     selectedPriority,
     selectedStatus,
     selectedOwner,
+    urlStatus,
+    urlGroup,
+    urlOwnerId,
+    urlActiveOnly,
     sortBy,
     sortOrder,
-    user,
-    tickets.length,
   ]);
 
   // Reset page when filters change
   useEffect(() => {
-    setCurrentPage((prev) => (prev === 1 ? prev : 1));
-  }, [debouncedSearch, selectedCategory, selectedPriority, selectedStatus, selectedOwner, sortBy, sortOrder]);
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCategory, selectedPriority, selectedStatus, selectedOwner, sortBy, sortOrder, urlStatus, urlGroup, urlOwnerId, urlActiveOnly]);
 
   useEffect(() => {
     fetchQueue();
@@ -161,7 +227,77 @@ export const StaffTicketQueue: React.FC = () => {
     setSortBy("createdAt");
     setSortOrder("desc");
     setCurrentPage(1);
+    setSearchParams(new URLSearchParams());
   };
+
+  const activeChips: { id: string; label: string; testId: string; onRemove: () => void }[] = [];
+
+  if (urlGroup === "open") {
+    activeChips.push({
+      id: "group-open",
+      label: "Open tickets",
+      testId: "chip-group-open",
+      onRemove: () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete("group");
+        setSearchParams(next);
+      },
+    });
+  }
+
+  if (urlOwnerId === "me" && urlActiveOnly === "true") {
+    activeChips.push({
+      id: "my-active",
+      label: "My active tickets",
+      testId: "chip-my-active",
+      onRemove: () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete("ownerId");
+        next.delete("activeOnly");
+        setSearchParams(next);
+      },
+    });
+  } else {
+    if (urlOwnerId === "me") {
+      activeChips.push({
+        id: "owner-me",
+        label: "Assigned to Me",
+        testId: "chip-my-tickets",
+        onRemove: () => {
+          const next = new URLSearchParams(searchParams);
+          next.delete("ownerId");
+          setSearchParams(next);
+        },
+      });
+    }
+    if (urlActiveOnly === "true") {
+      activeChips.push({
+        id: "active-only",
+        label: "Active only",
+        testId: "chip-active-only",
+        onRemove: () => {
+          const next = new URLSearchParams(searchParams);
+          next.delete("activeOnly");
+          setSearchParams(next);
+        },
+      });
+    }
+  }
+
+  if (urlStatus) {
+    const statusLabel = STATUS_LABELS[urlStatus] || urlStatus;
+    activeChips.push({
+      id: `status-${urlStatus}`,
+      label: statusLabel,
+      testId: `chip-status-${urlStatus}`,
+      onRemove: () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete("status");
+        setSelectedStatus("");
+        setSearchParams(next);
+      },
+    });
+  }
 
   if (isForbidden) {
     return (
@@ -241,6 +377,7 @@ export const StaffTicketQueue: React.FC = () => {
                 </svg>
               </span>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -319,6 +456,29 @@ export const StaffTicketQueue: React.FC = () => {
           </div>
         </div>
 
+        {/* Active Filter Chips */}
+        {activeChips.length > 0 && (
+          <div className="d-flex align-items-center gap-2 flex-wrap pt-2 pb-2 mb-1 border-top" data-testid="filter-chips-container">
+            <span className="text-muted small fw-semibold">Active filters:</span>
+            {activeChips.map((chip) => (
+              <span
+                key={chip.id}
+                className="badge bg-light text-dark border d-inline-flex align-items-center gap-1 px-2.5 py-1.5 rounded-pill"
+                data-testid={chip.testId}
+              >
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  className="btn-close btn-close-sm ms-1"
+                  style={{ fontSize: "0.55rem" }}
+                  aria-label={`Remove filter: ${chip.label}`}
+                  onClick={chip.onRemove}
+                />
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Result Counter & Clear Filters CTA */}
         <div className="d-flex flex-wrap align-items-center justify-content-between pt-2 border-top text-muted small gap-2">
           <span data-testid="result-counter">
@@ -326,7 +486,7 @@ export const StaffTicketQueue: React.FC = () => {
               ? `Showing ${startRecord} to ${endRecord} of ${pagination.totalRecords} tickets`
               : "0 tickets found"}
           </span>
-          {(search || selectedCategory || selectedPriority || selectedStatus || selectedOwner) && (
+          {(search || selectedCategory || selectedPriority || selectedStatus || selectedOwner || activeChips.length > 0) && (
             <button
               onClick={clearFilters}
               className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold"

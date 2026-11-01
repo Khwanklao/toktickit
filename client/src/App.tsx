@@ -11,6 +11,8 @@ import { CreateTicket } from "./components/CreateTicket.js";
 import { TicketDetail } from "./components/TicketDetail.js";
 import { StaffTicketQueue } from "./components/StaffTicketQueue.js";
 import { StaffTicketDetail } from "./components/StaffTicketDetail.js";
+import { StaffDashboard } from "./components/StaffDashboard.js";
+import { RequesterDashboard } from "./components/RequesterDashboard.js";
 import { UserManagement } from "./components/UserManagement.js";
 import { CheckSystem } from "./components/CheckSystem.js";
 import "./index.css";
@@ -37,6 +39,20 @@ const RootRedirect: React.FC = () => {
   }
 
   return <Navigate to={getRoleHomePath(user.role)} replace />;
+};
+
+const DashboardRoute: React.FC = () => {
+  const { user } = useAuth();
+  if (user && (user.role === "IT_STAFF" || user.role === "ADMINISTRATOR")) {
+    return <Navigate to="/staff/dashboard" replace />;
+  }
+  return (
+    <RouteGuard allowedRoles={["REQUESTER"]}>
+      <AppShell>
+        <RequesterDashboard />
+      </AppShell>
+    </RouteGuard>
+  );
 };
 
 export function AppRoutes() {
@@ -76,6 +92,20 @@ export function AppRoutes() {
             </AppShell>
           </RouteGuard>
         }
+      />
+      <Route
+        path="/staff/dashboard"
+        element={
+          <RouteGuard allowedRoles={["IT_STAFF", "ADMINISTRATOR"]}>
+            <AppShell>
+              <StaffDashboard />
+            </AppShell>
+          </RouteGuard>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={<DashboardRoute />}
       />
       <Route
         path="/staff/queue"
