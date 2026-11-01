@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -23,6 +27,9 @@ export default defineConfig({
       url: "http://localhost:3000/api/health",
       reuseExistingServer: true,
       timeout: 30000,
+      env: {
+        DATABASE_URL: process.env.DATABASE_URL,
+      },
     },
     {
       command: "npm run dev:client",
